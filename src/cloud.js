@@ -285,6 +285,22 @@ export function subscribeMyRole(me, cb) {
     () => cb(null));
 }
 
+/* ----------------- team logos ----------------- */
+// One public doc per event: { eventId, logos: { [teamName]: dataUrl } }. Kept
+// apart from the event docs so it doesn't bloat them; read (no login) by the
+// broadcast overlay and the Live game page.
+const teamLogosRef = (eid) => doc(db, "public", `teamlogos_${eid}`);
+export function subscribeTeamLogos(cb) {
+  return onSnapshot(teamLogosRef(reqEid()),
+    (d) => cb(d.exists() ? d.data().logos || {} : {}),
+    (err) => { console.warn("team logos unavailable:", err?.code || err); cb({}); });
+}
+// dataUrl null removes the team's logo.
+export async function setTeamLogo(teamName, dataUrl) {
+  const eid = reqEid();
+  await setDoc(teamLogosRef(eid), { eventId: eid, logos: { [teamName]: dataUrl || deleteField() } }, { merge: true });
+}
+
 /* ----------------- logo library + event branding ----------------- */
 // Reusable logo library (global). Each logo is { name, dataUrl } (small PNG).
 export function subscribeLogos(cb) {

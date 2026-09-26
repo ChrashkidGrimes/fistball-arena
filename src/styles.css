@@ -937,3 +937,9 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .guide-summary { background: #efecf7; color: var(--brand); border-radius: 8px; padding: 12px 14px; margin-top: 20px; font-size: 14px; }
 .guide-updated { margin-top: 10px; font-size: 12px; color: var(--muted); text-align: right; }
 .game-h .gh-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* Team logos in the Settings team matrix */
+.mx-logo { position: relative; display: inline-flex; flex: none; }
+.mx-logo img { width: 30px; height: 30px; object-fit: contain; border-radius: 6px; cursor: pointer; background: #fff; border: 1px solid var(--line); }
+.mx-logo-x { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; border: 0; padding: 0; font-size: 9px; line-height: 16px; background: #c0392b; color: #fff; cursor: pointer; }
+.mx-logo-add { flex: none; font-size: 10px; font-weight: 700; padding: 3px 5px; border-radius: 6px; border: 1px dashed var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.mx-logo-add:hover { border-color: var(--brand-2); color: var(--brand-2); }

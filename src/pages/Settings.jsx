@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   setEventStatus, subscribeLivePointer, setLiveEvent, clearLiveEvent,
-  subscribeLogos, addLogo, deleteLogo, saveBranding, updateEventDetails, updateEventFields, publishGames, resetScores, saveScoringRules, subscribeGames,
+  subscribeLogos, addLogo, deleteLogo, subscribeTeamLogos, setTeamLogo, saveBranding, updateEventDetails, updateEventFields, publishGames, resetScores, saveScoringRules, subscribeGames,
 } from "../cloud.js";
 import { TYPES, COMMON_AGES, expandBuilder, buildColumns, sexWord } from "../categories.js";
 import { describeFormat, formatMatches, formatWarnings, slotOptions, parseSlot, slotValue, normalizeOverride, ROUND_OPTIONS } from "../schedule/format.js";
@@ -163,6 +163,25 @@ export default function Settings({ me }) {
     e[i] = { ...e[i], cats: cur.includes(cat) ? cur.filter((c) => c !== cat) : [...cur, cat] };
     return { ...d, entries: e };
   });
+  // Team logos (shown on the broadcast scoreboard) — saved immediately.
+  const [teamLogos, setTeamLogos] = useState({});
+  useEffect(() => subscribeTeamLogos(setTeamLogos), [eventId]);
+  const logoInput = useRef(null);
+  const logoFor = useRef("");
+  const pickLogo = (name) => { logoFor.current = name; logoInput.current?.click(); };
+  const onTeamLogo = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !logoFor.current) return;
+    setStatus("Uploading team logo…");
+    try { await setTeamLogo(logoFor.current, await fileToLogoDataUrl(file, 128)); setStatus(`Logo saved for ${logoFor.current}.`); }
+    catch (e2) { setStatus("Logo upload failed: " + (e2?.message || e2)); }
+  };
+  const removeTeamLogo = async (name) => {
+    try { await setTeamLogo(name, null); setStatus(`Logo removed for ${name}.`); }
+    catch (e2) { setStatus("Failed: " + (e2?.message || e2)); }
+  };
+
   const saveTeams = () => {
     setStatus("Saving teams…");
     updateEventFields({ entries: details.entries })
@@ -443,7 +462,9 @@ export default function Settings({ me }) {
                       <tbody>
                         {(details.entries || []).map((t, i) => (
                           <tr key={i}>
-                            <td className="mx-team"><span className="mx-team-cell"><span className="flag">{flagFor(t.name)}</span><span className="mx-team-inputs"><input className="mx-team-input" value={t.name} disabled={archived} onChange={(e) => renameTeam(i, e.target.value)} aria-label="Team name" /><input className="mx-team-short" value={t.short || ""} disabled={archived} onChange={(e) => setShort(i, e.target.value)} placeholder="short name for schedule (optional)" aria-label="Short name" /></span></span></td>
+                            <td className="mx-team"><span className="mx-team-cell">{teamLogos[t.name]
+                              ? <span className="mx-logo"><img src={teamLogos[t.name]} alt="" title="Change logo" onClick={() => !archived && pickLogo(t.name)} />{!archived && <button className="mx-logo-x" onClick={() => removeTeamLogo(t.name)} aria-label="Remove logo" title="Remove logo">✕</button>}</span>
+                              : !archived && <button className="mx-logo-add" onClick={() => pickLogo(t.name)} title="Add team logo (shown on the broadcast scoreboard)">+ logo</button>}<span className="flag">{flagFor(t.name)}</span><span className="mx-team-inputs"><input className="mx-team-input" value={t.name} disabled={archived} onChange={(e) => renameTeam(i, e.target.value)} aria-label="Team name" /><input className="mx-team-short" value={t.short || ""} disabled={archived} onChange={(e) => setShort(i, e.target.value)} placeholder="short name for schedule (optional)" aria-label="Short name" /></span></span></td>
                             {cols.leaves.map((lf) => (
                               <td key={lf.name} className="mx-cell">
                                 <input type="checkbox" checked={(t.cats || []).includes(lf.name)} disabled={archived} onChange={() => toggleEntry(i, lf.name)} title={lf.name} />
@@ -465,6 +486,8 @@ export default function Settings({ me }) {
                 );
               })()
             )}
+<input ref={logoInput} type="file" accept="image/*" hidden onChange={onTeamLogo} />
+            {(details.entries || []).length > 0 && <p className="muted-sm" style={{ marginTop: 8 }}>Team logos (“+ logo”) are saved right away and shown on the broadcast scoreboard. A logo is linked to the team name — renaming a team drops it.</p>}
             {!archived && (details.entries || []).length > 0 && <button className="btn primary" style={{ marginTop: 12 }} onClick={saveTeams}>Save teams</button>}
           </div>
         </Step>
