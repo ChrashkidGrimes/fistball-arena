@@ -1,6 +1,6 @@
 import {
   collection, collectionGroup, doc, getDoc, getDocs, setDoc, onSnapshot,
-  runTransaction, serverTimestamp, updateDoc, writeBatch, deleteDoc, deleteField, query, where,
+  runTransaction, serverTimestamp, updateDoc, writeBatch, deleteDoc, deleteField, arrayUnion, query, where,
 } from "firebase/firestore";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { db, auth, googleProvider } from "./firebase.js";
@@ -917,9 +917,14 @@ export async function releaseLock(gameId, me) {
 export async function adminUnlock(gameId) {
   await updateDoc(edoc("reports", gameId), { lockedBy: null });
 }
-// Reopen a submitted report for editing (keeps the scores). Admin/official only.
-export async function reopenReport(gameId) {
-  await updateDoc(edoc("reports", gameId), { status: "draft", lockedBy: null });
+// Reopen a submitted report to amend it (e.g. remove a card after a review).
+// Event admins only (enforced by the rules). Keeps the scores; logs who/when/why
+// in `amendments`. While `amending`, the public result stays "Finished".
+export async function reopenReport(gameId, me, reason) {
+  await updateDoc(edoc("reports", gameId), {
+    status: "draft", lockedBy: null, amending: true,
+    amendments: arrayUnion({ at: new Date().toISOString(), by: me?.name || me?.email || "—", reason: reason || "" }),
+  });
 }
 
 /* ----------------- saving ----------------- */
@@ -937,6 +942,7 @@ export async function submitReport(gameId, me) {
   await updateDoc(edoc("reports", gameId), {
     status: "submitted",
     lockedBy: null,
+    amending: false,
     submittedBy: { uid: me.uid, name: me.name },
     submittedAt: serverTimestamp(),
   });
@@ -1052,7 +1058,7 @@ function deriveResult(rep) {
     if (a > b) setsA++; else if (b > a) setsB++;
   }
   let status = "Not Started";
-  if (rep.status === "submitted") status = "Finished";
+  if (rep.status === "submitted" || rep.amending) status = "Finished";
   else if (sets.length) status = "In progress";
   const i = rep.info || {};
   // Flat scoreboard fields for broadcast graphics (vMix/Singular read them from

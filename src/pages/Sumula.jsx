@@ -155,6 +155,15 @@ export default function Sumula({ me }) {
     } catch (e) { alert("Reset failed: " + (e?.message || e)); }
   }
 
+  // Admin-only amendment of a submitted report (e.g. a card removed after review).
+  async function reopenToAmend() {
+    const reason = window.prompt("Reason for amending this submitted report (e.g. “Yellow card #7 removed after review”):", "");
+    if (reason === null) return;
+    if (!reason.trim()) { alert("Please give a reason — it is logged on the report."); return; }
+    try { await reopenReport(id, me, reason.trim()); await acquireLock(id, me); }
+    catch (e) { alert("Could not reopen: " + (e?.message || e)); }
+  }
+
   async function copyOverlay() {
     const url = overlayUrl(eventId, { game: id });
     try { await navigator.clipboard.writeText(url); alert("Broadcast link copied:\n" + url); }
@@ -183,7 +192,7 @@ export default function Sumula({ me }) {
         <div className="lockbar">
           <span>
             {submitted
-              ? "✓ This report was submitted — read only."
+              ? `✓ This report was submitted — read only.${isAdmin ? "" : " Only an event admin can amend it."}`
               : archived
                 ? "📦 This event is archived — read only. Re-activate it in Settings → Event status to score."
                 : !canScore
@@ -195,8 +204,8 @@ export default function Sumula({ me }) {
           {me.admin && !submitted && !archived && lockedBy && lockedBy.uid !== me.uid && (
             <button className="btn danger sm" onClick={() => adminUnlock(id)}>Admin unlock</button>
           )}
-          {canScore && submitted && (
-            <button className="btn sm" onClick={async () => { await reopenReport(id); await acquireLock(id, me); }}>Reopen</button>
+          {isAdmin && submitted && !archived && (
+            <button className="btn sm" onClick={reopenToAmend} title="Event admins only — logged with your name and the reason">Reopen to amend</button>
           )}
           {archived && me.admin && (
             <button className="btn sm" onClick={() => nav(`/e/${eventId}/settings`)}>Open Settings</button>
@@ -549,6 +558,17 @@ function FinishSection({ d, scoring, update, onPdf }) {
         </p>
       </div>
 
+      {(d.amendments || []).length > 0 && (
+        <div className="card">
+          <h2>Amended after submission</h2>
+          {d.amendments.map((a, i) => (
+            <p key={i} style={{ margin: "4px 0" }}>
+              <strong>{new Date(a.at).toLocaleString()}</strong> · {a.by} — {a.reason || "—"}
+            </p>
+          ))}
+        </div>
+      )}
+
       <div className="card">
         <h2>Remarks / extraordinary events</h2>
         <div className="field">
@@ -607,6 +627,7 @@ function extractDraft(data) {
     responsible: data.responsible || "",
     signatures: data.signatures || { capA: false, capB: false, referee: false },
     submittedAt: data.submittedAt || null,
+    amendments: data.amendments || [],
   };
 }
 function pickSumula(d) {

@@ -253,6 +253,11 @@ export default function SumulaPDF({ draft, branding }) {
           <View style={{ borderWidth: 1, borderColor: LINE, padding: 5, minHeight: 30 }}>
             <Text style={s.small}>{d.remarks || "—"}</Text>
             <Text style={[s.small, { marginTop: 4 }]}>Responsible: {d.responsible || "—"}</Text>
+            {(d.amendments || []).map((a, i) => (
+              <Text key={i} style={[s.small, { marginTop: 4 }]}>
+                Amended after submission — {new Date(a.at).toLocaleString("en-GB")} · {a.by}: {a.reason || "—"}
+              </Text>
+            ))}
           </View>
           <View style={s.sigRow}>
             {[[`Captain — ${short(d.teamA.name)}`, d.signatures.capA],

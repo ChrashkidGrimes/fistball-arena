@@ -104,10 +104,17 @@ service cloud.firestore {
       }
 
       // Reports (súmulas): official OR admin OR org-admin, AND event active.
-      // No report writes when archived — for anyone.
+      // No report writes when archived — for anyone. Once SUBMITTED (or being
+      // amended after submission) only an event admin / org-admin can change
+      // it; only they can delete (reset) a report.
       match /reports/{gameId} {
         allow read: if isOrgAdmin() || isMember(eventId);
-        allow write: if isActive(eventId) && (isOrgAdmin() || canWriteReports(eventId));
+        allow create: if isActive(eventId) && (isOrgAdmin() || canWriteReports(eventId));
+        allow update: if isActive(eventId) && (isOrgAdmin() || isEventAdmin(eventId)
+          || (canWriteReports(eventId)
+              && resource.data.get('status', '') != 'submitted'
+              && resource.data.get('amending', false) != true));
+        allow delete: if isActive(eventId) && (isOrgAdmin() || isEventAdmin(eventId));
       }
 
       // Results: PUBLIC read (spectator app, no login); official/admin write.
