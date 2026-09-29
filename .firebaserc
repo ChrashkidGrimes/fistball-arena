@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "demo-fistball"
+    "default": "fistball-arena",
+    "emulator": "demo-fistball"
   }
 }
