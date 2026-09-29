@@ -121,7 +121,7 @@ export default function Sumula({ me }) {
         if (!r) continue;
         n[side].players = (r.players || []).map((p) => ({
           nr: p.nr, name: p.name, first: p.first, photo: p.photo || "",
-          captain: false, onCourt: true, cards: { y: false, yr: false, r: false },
+          captain: false, onCourt: false, cards: { y: false, yr: false, r: false },
         }));
         n[side].staff = (r.staff || []).map((s) => ({
           role: s.role, name: s.name, first: s.first, photo: s.photo || "",

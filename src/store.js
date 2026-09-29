@@ -52,7 +52,7 @@ function cloneTeam(t) {
     name: t.name,
     players: (t.players || []).map((p) => ({
       nr: p.nr, name: p.name, first: p.first,
-      captain: !!p.captain, onCourt: true,
+      captain: !!p.captain, onCourt: false,
       cards: { y: false, yr: false, r: false },
     })),
     staff: (t.staff || []).map((s) => ({
