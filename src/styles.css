@@ -631,6 +631,8 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .matrix .mx-team-short { border: 1px solid transparent; background: transparent; font: inherit; font-weight: 400; font-size: 11px; color: var(--muted); min-width: 130px; padding: 2px 6px; border-radius: 6px; }
 .matrix .mx-team-short:hover:not(:disabled) { border-color: var(--line); }
 .matrix .mx-team-short:focus { border-color: var(--brand); background: #fff; outline: none; }
+.mx-team-meta { display: flex; gap: 2px; }
+.mx-team-meta .mx-team-short { flex: 1; min-width: 0; }
 
 /* ---------- Format per category ---------- */
 .fmt-cat { padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -873,6 +875,18 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .ref-grid .rg-game:hover .rg-nr { color: var(--accent); }
 .rg-nr { font-weight: 800; }
 .rg-teams { font-weight: 700; margin: 2px 0; }
+.officials-card { margin: 4px 0 14px; }
+.of-grid td { vertical-align: top; }
+.of-name { font-weight: 700; white-space: nowrap; }
+.of-roles { display: inline-flex; gap: 3px; }
+.of-role { border: 1px solid var(--line); background: #fff; color: var(--muted); border-radius: 7px; padding: 4px 7px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.of-role.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.of-input { width: 120px; min-height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: #fff; font-size: 13px; }
+.of-input.of-sm { width: 100px; }
+.of-input.of-xs { width: 60px; }
+.of-day .of-slots { display: block; margin-top: 3px; }
+.of-day.of-reserve { background: #fdf6e9; }
+.of-day.of-unavailable { background: #fbeaec; }
 .ref-input { width: 150px; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; background: #fff; font-size: 13px; }
 .ref-input:focus { outline: 2px solid var(--brand-2); border-color: var(--brand-2); }
 .rg-saved td { background: #e6f5ee; transition: background .3s; }

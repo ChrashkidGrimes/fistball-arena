@@ -686,16 +686,43 @@ export async function saveGameKit(gameId, side, kit) {
   await setDoc(edoc("games", gameId), patch, { merge: true });
   try { await setDoc(edoc("results", gameId), patch, { merge: true }); } catch (_) { /* result may not exist */ }
 }
+const refereeId = (r, i) => (`${r.name}_${r.first}`).toLowerCase().replace(/[^a-z0-9]+/g, "_") || `ref_${i}`;
+// Officials fields (see src/officials/model.js). The import may bring some of
+// them; whatever it leaves blank is kept from the existing doc, so a re-import
+// never wipes availability etc. edited in the app.
+const OFFICIAL_FIELDS = ["roles", "country", "club", "gender", "lrPair", "availability", "maxPerDay"];
 export async function publishReferees(list, { replaceAll } = {}) {
+  const prev = {};
+  (await getDocs(ecol("referees"))).forEach((d) => { prev[d.id] = d.data(); });
   if (replaceAll) await clearCollection("referees");
   for (let i = 0; i < list.length; i += 400) {
     const batch = writeBatch(db);
     list.slice(i, i + 400).forEach((r, j) => {
-      const id = (`${r.name}_${r.first}`).toLowerCase().replace(/[^a-z0-9]+/g, "_") || `ref_${i + j}`;
-      batch.set(edoc("referees", id), { name: r.name, first: r.first, role: r.role || "Referee", photo: r.photo || "", birthday: r.birthday || "" });
+      const id = refereeId(r, i + j);
+      const data = { name: r.name, first: r.first, role: r.role || "Referee", photo: r.photo || "", birthday: r.birthday || "" };
+      for (const k of OFFICIAL_FIELDS) {
+        const v = r[k] ?? prev[id]?.[k];
+        if (v !== undefined && v !== "") data[k] = v;
+      }
+      batch.set(edoc("referees", id), data);
     });
     await batch.commit();
   }
+}
+// Officials card: add one person, edit fields (top-level fields are replaced
+// whole, e.g. the full availability map), or remove them from the registry.
+export async function addReferee(r) {
+  const id = refereeId(r, Date.now());
+  await setDoc(edoc("referees", id), { name: r.name || "", first: r.first || "", role: "Referee", photo: "", birthday: "", ...r }, { merge: true });
+  return id;
+}
+export async function updateReferee(id, patch) {
+  const p = {};
+  for (const [k, v] of Object.entries(patch)) p[k] = v === "" || v == null ? deleteField() : v;
+  await updateDoc(edoc("referees", id), p);
+}
+export async function deleteReferee(id) {
+  await deleteDoc(edoc("referees", id));
 }
 
 // "/" is illegal in a Firestore document id (it's a path separator), and some

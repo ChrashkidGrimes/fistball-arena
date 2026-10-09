@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { subscribeGames, subscribeReferees, saveGameRefs } from "../cloud.js";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
+import { teamMeta } from "../officials/model.js";
+import OfficialsCard from "./OfficialsCard.jsx";
 
 const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["a1", "Assistant 1"], ["a2", "Assistant 2"]];
 const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); return new Date(2000 + (y || 0), (m || 1) - 1, d || 1); };
@@ -14,7 +16,7 @@ const shortTeam = (t) => String(t?.name || t || "").split(" - ")[0];
 // registry. Saved on the game and pre-fills its report. Admin only.
 export default function Referees() {
   const nav = useNavigate();
-  const { eventId, isAdmin, archived } = useEvent();
+  const { eventId, event, isAdmin, archived } = useEvent();
   const [games, setGames] = useState([]);
   const [refs, setRefs] = useState([]);
   const [day, setDay] = useState("all");
@@ -27,6 +29,7 @@ export default function Referees() {
   useEffect(() => subscribeReferees(setRefs), []);
 
   const names = useMemo(() => [...new Set(refs.map(refName).filter(Boolean))].sort(), [refs]);
+  const teamNations = useMemo(() => [...new Set((event?.entries || []).map((e) => teamMeta(event.entries, e.name).country).filter(Boolean))].sort(), [event]);
   const days = useMemo(() => [...new Set(games.map((g) => g.date))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -54,6 +57,8 @@ export default function Referees() {
       <h2 className="page-h">Referees</h2>
       <p className="muted-sm" style={{ marginTop: -8 }}>Assign the officiating team per game. Names come from the event's referee registry (import via Players &amp; staff) — or type a new one. Saved automatically; the game report is pre-filled with these.</p>
       {archived && <div className="warn-box">This event is archived — read-only.</div>}
+
+      <OfficialsCard refs={refs} days={days} dayLabel={dayLabel} teamNations={teamNations} archived={archived} />
 
       <div className="filter-bar" style={{ padding: "8px 0" }}>
         <span className="filter-label">Day</span>

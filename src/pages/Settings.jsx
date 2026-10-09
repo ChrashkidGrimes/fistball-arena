@@ -158,6 +158,8 @@ export default function Settings({ me }) {
   const removeTeam = (i) => edit((d) => ({ ...d, entries: (d.entries || []).filter((_, j) => j !== i) }));
   const renameTeam = (i, name) => edit((d) => { const e = [...(d.entries || [])]; e[i] = { ...e[i], name }; return { ...d, entries: e }; });
   const setShort = (i, short) => edit((d) => { const e = [...(d.entries || [])]; e[i] = { ...e[i], short }; return { ...d, entries: e }; });
+  // Nation / club per team — officials may not referee their own (src/officials/model.js teamMeta).
+  const setEntryField = (i, k, v) => edit((d) => { const e = [...(d.entries || [])]; e[i] = { ...e[i], [k]: v }; return { ...d, entries: e }; });
   const toggleEntry = (i, cat) => edit((d) => {
     const e = [...(d.entries || [])]; const cur = e[i].cats || [];
     e[i] = { ...e[i], cats: cur.includes(cat) ? cur.filter((c) => c !== cat) : [...cur, cat] };
@@ -466,7 +468,7 @@ export default function Settings({ me }) {
                           <tr key={i}>
                             <td className="mx-team"><span className="mx-team-cell">{teamLogos[t.name]
                               ? <span className="mx-logo"><img src={teamLogos[t.name]} alt="" title="Change logo" onClick={() => !archived && pickLogo(t.name)} />{!archived && <button className="mx-logo-x" onClick={() => removeTeamLogo(t.name)} aria-label="Remove logo" title="Remove logo">✕</button>}</span>
-                              : !archived && <button className="mx-logo-add" onClick={() => pickLogo(t.name)} title="Add team logo (shown on the broadcast scoreboard)">+ logo</button>}<span className="flag">{flagFor(t.name)}</span><span className="mx-team-inputs"><input className="mx-team-input" value={t.name} disabled={archived} onChange={(e) => renameTeam(i, e.target.value)} aria-label="Team name" /><input className="mx-team-short" value={t.short || ""} disabled={archived} onChange={(e) => setShort(i, e.target.value)} placeholder="short name for schedule (optional)" aria-label="Short name" /></span></span></td>
+                              : !archived && <button className="mx-logo-add" onClick={() => pickLogo(t.name)} title="Add team logo (shown on the broadcast scoreboard)">+ logo</button>}<span className="flag">{flagFor(t.name)}</span><span className="mx-team-inputs"><input className="mx-team-input" value={t.name} disabled={archived} onChange={(e) => renameTeam(i, e.target.value)} aria-label="Team name" /><input className="mx-team-short" value={t.short || ""} disabled={archived} onChange={(e) => setShort(i, e.target.value)} placeholder="short name for schedule (optional)" aria-label="Short name" /><span className="mx-team-meta"><input className="mx-team-short" value={t.country || ""} disabled={archived} onChange={(e) => setEntryField(i, "country", e.target.value)} placeholder="nation (default: team name)" aria-label="Nation" title="Officials from this nation can't officiate this team" /><input className="mx-team-short" value={t.club || ""} disabled={archived} onChange={(e) => setEntryField(i, "club", e.target.value)} placeholder="club (default: team name)" aria-label="Club" title="Officials from this club can't officiate this team" /></span></span></span></td>
                             {cols.leaves.map((lf) => (
                               <td key={lf.name} className="mx-cell">
                                 <input type="checkbox" checked={(t.cats || []).includes(lf.name)} disabled={archived} onChange={() => toggleEntry(i, lf.name)} title={lf.name} />
