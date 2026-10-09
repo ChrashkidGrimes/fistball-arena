@@ -13,7 +13,7 @@ const finished = (r) => r && r.status === "Finished";
 const winnerOf = (r) => (!finished(r) ? null : num(r.setsA) > num(r.setsB) ? r.teamA : num(r.setsB) > num(r.setsA) ? r.teamB : null);
 const loserOf = (r) => (!finished(r) ? null : num(r.setsA) > num(r.setsB) ? r.teamB : num(r.setsB) > num(r.setsA) ? r.teamA : null);
 
-function isPlaceholder(name) {
+export function isPlaceholder(name) {
   const n = String(name || "").trim();
   return !n || /(winner|loser)/i.test(n) || /\b\d+(st|nd|rd|th)\b/i.test(n);
 }

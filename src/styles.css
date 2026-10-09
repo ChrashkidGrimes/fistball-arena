@@ -906,6 +906,12 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .rg-issues li:first-child { border-top: 0; }
 .rg-issues li.rg-issue-hard { border-left: 3px solid var(--r); }
 .rg-issues li.rg-issue-soft { border-left: 3px solid #e0a63a; }
+.modal.aa-modal { max-width: 760px; text-align: left; position: relative; max-height: calc(100vh - 48px); overflow: auto; }
+.aa-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; font-size: 14px; }
+.aa-summary { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; margin: 8px 0; }
+.aa-diff { max-height: 45vh; overflow: auto; margin-top: 8px; }
+.aa-hard { color: var(--r); font-size: 12px; margin-top: 2px; }
+.aa-soft { color: #a9761c; font-size: 12px; margin-top: 2px; }
 .ref-input { width: 150px; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; background: #fff; font-size: 13px; }
 .ref-input:focus { outline: 2px solid var(--brand-2); border-color: var(--brand-2); }
 .rg-saved td { background: #e6f5ee; transition: background .3s; }

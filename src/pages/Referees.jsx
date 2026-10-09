@@ -6,6 +6,7 @@ import { flagFor } from "../flags.js";
 import { teamMeta } from "../officials/model.js";
 import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
+import AutoAssignModal from "./AutoAssignModal.jsx";
 
 const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["a1", "Assistant 1"], ["a2", "Assistant 2"]];
 const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); return new Date(2000 + (y || 0), (m || 1) - 1, d || 1); };
@@ -26,6 +27,7 @@ export default function Referees() {
   const [saved, setSaved] = useState({});    // gameId -> ts (flash "saved")
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [showList, setShowList] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(false);
   const timers = useRef({});
 
   useEffect(() => subscribeGames(setGames), []);
@@ -36,10 +38,8 @@ export default function Referees() {
   const days = useMemo(() => [...new Set(games.map((g) => g.date))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
   // Rule checks over ALL games (games in a row / double booking span the day),
   // including unsaved edits. See src/officials/rules.js.
-  const check = useMemo(() => {
-    const merged = games.map((g) => (local[g.id] ? { ...g, refs: local[g.id] } : g));
-    return checkAssignments(merged, refs, event?.entries || []);
-  }, [games, local, refs, event]);
+  const merged = useMemo(() => games.map((g) => (local[g.id] ? { ...g, refs: local[g.id] } : g)), [games, local]);
+  const check = useMemo(() => checkAssignments(merged, refs, event?.entries || []), [merged, refs, event]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     return games
@@ -62,6 +62,16 @@ export default function Referees() {
     }, 500);
   };
 
+  // Write an auto-assign proposal: one saveGameRefs per changed game.
+  const applyProposal = async (res) => {
+    const byGame = {};
+    for (const p of res.proposals) (byGame[p.gameId] ||= {})[p.slot] = p.to;
+    const next = {};
+    for (const g of merged) if (byGame[g.id]) next[g.id] = { ...(g.refs || {}), ...byGame[g.id] };
+    setLocal((p) => ({ ...p, ...next }));
+    await Promise.all(Object.entries(next).map(([id, r]) => saveGameRefs(id, r)));
+  };
+
   return (
     <>
       <h2 className="page-h">Referees</h2>
@@ -77,6 +87,9 @@ export default function Referees() {
       </div>
       <input className="game-search" style={{ maxWidth: 360, marginBottom: 10 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search game # or team…" />
 
+      {!archived && <button className="btn primary sm" style={{ marginBottom: 10 }} onClick={() => setAutoOpen(true)} disabled={!refs.length} title={refs.length ? "" : "Add officials first"}>Auto-assign…</button>}
+      {autoOpen && <AutoAssignModal games={merged} refs={refs} entries={event?.entries || []} days={days} day={day} dayLabel={dayLabel} onApply={applyProposal} onClose={() => setAutoOpen(false)} />}
+      <LoadOverview games={merged} days={days} dayLabel={dayLabel} />
       <IssueSummary check={check} games={games} day={day} showList={showList} setShowList={setShowList}
         issuesOnly={issuesOnly} setIssuesOnly={setIssuesOnly} onPick={(g) => { setDay("all"); setQ(String(g.nr)); }} />
 
@@ -149,5 +162,40 @@ function IssueSummary({ check, games, day, showList, setShowList, issuesOnly, se
         </ul>
       )}
     </div>
+  );
+}
+
+// Games per official per day, split by role (SR = referee 1/2, LR = assistants,
+// AS = clerk), to spot an uneven load at a glance.
+const ROLE_OF = { r1: "SR", r2: "SR", a1: "LR", a2: "LR", clerk: "AS" };
+function LoadOverview({ games, days, dayLabel }) {
+  const rows = useMemo(() => {
+    const m = new Map();
+    for (const g of games) for (const [slot, role] of Object.entries(ROLE_OF)) {
+      const n = String(g.refs?.[slot] ?? "").trim();
+      if (!n) continue;
+      const k = n.toLowerCase();
+      if (!m.has(k)) m.set(k, { name: n, total: 0, day: {} });
+      const r = m.get(k); r.total++;
+      const d = (r.day[g.date] ||= { SR: 0, LR: 0, AS: 0 }); d[role]++;
+    }
+    return [...m.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  }, [games]);
+  if (!rows.length) return null;
+  const fmt = (d) => (d ? ["SR", "LR", "AS"].filter((r) => d[r]).map((r) => `${d[r]} ${r}`).join(" · ") : "");
+  return (
+    <details className="adv-tool" style={{ marginBottom: 10 }}>
+      <summary>Load per official</summary>
+      <div className="grid-scroll">
+        <table className="ref-grid">
+          <thead><tr><th>Official</th>{days.map((d) => <th key={d}>{dayLabel(d)}</th>)}<th>Total</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.name}><td className="of-name">{r.name}</td>{days.map((d) => <td key={d} className="muted-sm">{fmt(r.day[d])}</td>)}<td><b>{r.total}</b></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }
