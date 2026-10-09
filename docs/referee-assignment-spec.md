@@ -51,6 +51,10 @@ Fistball Arena. Read this before touching `src/pages/Referees.jsx`,
 | AS (Anschreiber, scorer) | `clerk` |
 | LR 1 / LR 2 (Linienrichter) | `a1`, `a2` |
 
+This mapping is final. Arena has exactly **one** scorer slot per game
+(`clerk`); no second AS slot is added (the Reiden two-scorer setup does not
+apply). `a1` / `a2` are always the two line judges (LR pair).
+
 ---
 
 ## 2. Data model extensions
@@ -89,7 +93,10 @@ Use existing `category` and `round` fields. Add a helper
 `isWomenFinal(game)` → true for women's categories when the round is semifinal,
 bronze/3rd-place or final. Check the actual `round` strings the generator
 produces (`src/schedule/bracket.js`, `format.js`) and match on those, not on
-guesses.
+guesses. The generator produces "Qualification round" (group stage),
+"Quarterfinal [n]", "Semifinal [n]", "Bronze medal match", "Gold medal match"
+and "Placement x-y". Finals rounds = Semifinal, Bronze medal match,
+Placement 3-5 (3rd place in the 5-team format) and Gold medal match.
 
 ### 2.4 Import
 
@@ -105,6 +112,9 @@ import can follow later.
 ### 3.1 Hard rules (blocking — never auto-assigned, red in the grid)
 
 1. **Country conflict**: official's `country` equals either team's country.
+   Hard for `r1` in every game and for `r2` in group-stage games. For `r2` in
+   knockout games see the exception in 3.2. `a1`, `a2` and `clerk` are always
+   hard.
 2. **Club conflict**: official's `club` equals either team's club
    (e.g. Ahlhorner SV members cannot officiate Ahlhorner SV games).
 3. **Unavailable**: availability status `unavailable` for that date, or the
@@ -115,13 +125,21 @@ import can follow later.
 6. **Women's finals gender rule**: in women's semifinals, bronze and final,
    at least one of `r1`/`r2` must be female.
 7. **Mandatory slots**: `r1`, `r2` are mandatory. `a1`/`a2` (LR) mandatory when
-   an LR pool exists. `clerk` (AS) is **optional** unless the AS pool is
-   non-empty (at club events teams provide their own scorers).
+   an LR pool exists. `clerk` (AS, the single scorer slot) is **optional**
+   unless the AS pool is non-empty (at club events teams provide their own
+   scorers).
 
 Hard rules are hard blocks, not warnings — this is a firm design principle.
 
 ### 3.2 Soft rules (allowed, orange in the grid, penalised in auto-assignment)
 
+- **Non-neutral second referee (knockout only)**: in a knockout game, `r2`
+  may come from one of the playing nations **only when no neutral eligible
+  referee is available** for that slot (eligible = available, no double
+  booking, no club conflict, women's-final gender rule still satisfied).
+  Highest soft penalty, always shown as an orange warning, never a silent
+  fallback. `r1` must always be neutral. Knockout = any game outside the group
+  stage (`phase !== "group"`, or a round other than "Qualification round").
 - **Reserve usage**: status `reserve` for that date → high penalty.
 - **Break violation**: same person in back-to-back slots without a break
   (configurable minimum gap, default: at least one free slot after N games).
@@ -149,6 +167,7 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
 
 ```
 score(assignment) = Σ hard violations × ∞  (excluded)
+                  + w_r2Nation  · non-neutral knockout r2
                   + w_reserve   · reserve uses
                   + w_break     · break violations
                   + w_load      · load imbalance
@@ -158,12 +177,13 @@ score(assignment) = Σ hard violations × ∞  (excluded)
 ```
 
 Weights live in one config object (event-level, editable later), default
-ordering: `w_reserve ≫ w_break > w_soloLR > w_load > w_gender > w_repeat`.
+ordering: `w_r2Nation ≫ w_reserve ≫ w_break > w_soloLR > w_load > w_gender > w_repeat`.
 
 ### 3.6 Solver
 
 - Process games in chronological order; per game fill SR, then LR (pairs), then
-  AS. For each slot choose the eligible candidate with the lowest marginal
+  AS. For a knockout `r2`, try every neutral candidate first; only if none is
+  eligible fall back to a non-neutral one (counted as a soft violation). For each slot choose the eligible candidate with the lowest marginal
   penalty; tie-break by fewest games so far, then name.
 - Then a local-improvement pass (swap two officials between games of the same
   day) while the total score decreases.
@@ -308,5 +328,4 @@ in the "Suggest uniforms" diff modal and applied in the same step.
 ## 6. Open questions
 
 - Availability: maintained in Arena only, or also imported from Excel?
-- Exact `round` strings for semifinal / bronze / final in the generator output.
 - Break rule: exact minimum gap (one free slot after how many consecutive games?).
