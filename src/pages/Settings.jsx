@@ -214,6 +214,12 @@ export default function Settings({ me }) {
     }
   }, [branding]);
 
+  // Step 8 state (generate & publish) — hooks must stay above the admin check.
+  const [genResult, setGenResult] = useState(null);
+  const [published, setPublished] = useState(false);
+  const [existingGames, setExistingGames] = useState([]);
+  useEffect(() => subscribeGames(setExistingGames), []);
+
   if (!isAdmin) return <div className="empty">Admins only.</div>;
 
   const thisIsLive = live?.eventId === eventId;
@@ -231,7 +237,7 @@ export default function Settings({ me }) {
   const addPtRow = () => edit((d) => ({ ...d, pointTable: [...(d.pointTable || []), { bestOf: 3, winSets: 2, loseSets: 1, winPts: 2, losePts: 0 }] }));
   const editPtRow = (i, k, v) => edit((d) => { const rows = [...(d.pointTable || [])]; rows[i] = { ...rows[i], [k]: v === "" ? "" : Number(v) }; return { ...d, pointTable: rows }; });
   const delPtRow = (i) => edit((d) => ({ ...d, pointTable: (d.pointTable || []).filter((_, j) => j !== i) }));
-  const usePreset = (rows) => edit((d) => ({ ...d, pointTable: rows.map((r) => ({ ...r })) }));
+  const applyPreset = (rows) => edit((d) => ({ ...d, pointTable: rows.map((r) => ({ ...r })) }));
   const savePoints = async () => {
     setStatus("Saving points…");
     try { await saveScoringRules({ pointTable: details.pointTable || [], drawPoints: details.drawPoints ?? 1 }); afterSave("Classification points saved."); }
@@ -288,11 +294,8 @@ export default function Settings({ me }) {
   };
   const slotsEmpty = !(details.slots?.courts || []).length || !(details.slots?.days || []).length;
 
-  // Step 8 — generate & publish the schedule from the saved setup.
-  const [genResult, setGenResult] = useState(null);
-  const [published, setPublished] = useState(false);
-  const [existingGames, setExistingGames] = useState([]);
-  useEffect(() => subscribeGames(setExistingGames), []);
+  // Step 8 — generate & publish the schedule from the saved setup (state is
+  // declared above, before the admin check, so hooks always run in the same order).
   const existingCats = new Set(existingGames.map((g) => g.category));
   const maxNr = existingGames.reduce((mx, g) => Math.max(mx, Number(g.nr) || 0), 0);
   // append: only build categories that don't have published games yet, numbering
@@ -662,9 +665,9 @@ export default function Settings({ me }) {
           <p className="muted-sm">How many standings points each result is worth. Empty = <b>IFA</b> (win 2 · loss 0). Set your own rows for other federations (e.g. PAFA).</p>
           {!archived && (
             <div style={{ display: "flex", gap: 8, margin: "6px 0" }}>
-              <button className="btn sm" onClick={() => usePreset(IFA_TABLE)}>Use IFA (2 / 0)</button>
-              <button className="btn sm" onClick={() => usePreset(PAFA_TABLE)}>Use PAFA</button>
-              <button className="btn sm" onClick={() => usePreset([])}>Clear</button>
+              <button className="btn sm" onClick={() => applyPreset(IFA_TABLE)}>Use IFA (2 / 0)</button>
+              <button className="btn sm" onClick={() => applyPreset(PAFA_TABLE)}>Use PAFA</button>
+              <button className="btn sm" onClick={() => applyPreset([])}>Clear</button>
               <span style={{ flex: 1 }} />
               <label className="muted-sm" style={{ display: "flex", alignItems: "center", gap: 6 }}>Draw pts
                 <input style={{ width: 46 }} type="number" value={details.drawPoints ?? 1} disabled={archived} onChange={(e) => edit((d) => ({ ...d, drawPoints: Number(e.target.value) }))} />

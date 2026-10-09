@@ -30,10 +30,6 @@ export default function Roster({ me }) {
   useEffect(() => subscribeRosters(setRosters), []);
   useEffect(() => subscribeResults(setResults), []);
 
-  if (!isAdmin) {
-    return <div className="empty">Admins only. <button className="btn" onClick={() => nav(`/e/${eventId}`)}>Back</button></div>;
-  }
-
   const doImport = async () => {
     setStatus("Reading DB tab…");
     try {
@@ -94,6 +90,11 @@ export default function Roster({ me }) {
     () => Math.max(1, ...teams.flatMap((t) => [t.players?.length || 0, t.staff?.length || 0])),
     [teams]
   );
+
+  // After all hooks, so they run in the same order whether or not the role has loaded yet.
+  if (!isAdmin) {
+    return <div className="empty">Admins only. <button className="btn" onClick={() => nav(`/e/${eventId}`)}>Back</button></div>;
+  }
 
   return (
     <>
