@@ -912,6 +912,13 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .aa-diff { max-height: 45vh; overflow: auto; margin-top: 8px; }
 .aa-hard { color: var(--r); font-size: 12px; margin-top: 2px; }
 .aa-soft { color: #a9761c; font-size: 12px; margin-top: 2px; }
+.kit-badge { display: inline-block; margin-top: 3px; border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 800; }
+.kit-badge.kb-clash { background: #fbeaec; color: var(--r); border: 1px solid var(--r); }
+.kit-badge.kb-unres { background: #eef0f6; color: var(--muted); border: 1px solid var(--line); }
+.kit-badge.kb-shorts { background: #fdf6e9; color: #a9761c; border: 1px solid #e0a63a; }
+.sk-seq { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.sk-item { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; padding: 1px 4px; border-radius: 6px; }
+.sk-item.sk-new { background: #efeaf9; font-weight: 700; }
 .ref-input { width: 150px; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; background: #fff; font-size: 13px; }
 .ref-input:focus { outline: 2px solid var(--brand-2); border-color: var(--brand-2); }
 .rg-saved td { background: #e6f5ee; transition: background .3s; }
