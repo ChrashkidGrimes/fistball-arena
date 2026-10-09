@@ -288,3 +288,87 @@ export function suggestKits(games, teamKits, opts = {}) {
     clashes: Object.keys(after).filter((id) => after[id].level === "clash"),
   };
 }
+
+/* ---------- referee shirts (spec §4.6) ---------- */
+// refKits: the event's officials' shirt colours [{ id, name, shirt }], in
+// preference order. All officials of a game wear one colour: game.kit.R = id.
+
+// Team shirts actually worn in a game (null when not set).
+const teamShirts = (g, teamKits) => [shirtOf(g.kit?.A, teamKits[name(g.teamA)]), shirtOf(g.kit?.B, teamKits[name(g.teamB)])].filter(Boolean);
+// Smallest ΔE between a referee colour and the team shirts (Infinity = no team shirt set).
+const contrast = (rk, g, teamKits) => Math.min(Infinity, ...teamShirts(g, teamKits).map((s) => deltaE(rk.shirt, s)));
+const usable = (refKits) => (refKits || []).filter((r) => r?.id && r.shirt);
+
+// Status of each game's CURRENT referee shirt:
+// { [gameId]: { level: "clash" | "unresolvable" | "unknown", msg } }.
+export function checkRefShirts(games, teamKits, refKits, opts = {}) {
+  const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
+  const list = usable(refKits);
+  const out = {};
+  if (!list.length) return out;
+  for (const g of games) {
+    if (!list.some((r) => contrast(r, g, teamKits) >= th)) { out[g.id] = { level: "unresolvable", msg: "No referee shirt colour contrasts with both teams" }; continue; }
+    const id = g.kit?.R;
+    if (!id) continue;
+    const rk = list.find((r) => r.id === id);
+    if (!rk) { out[g.id] = { level: "unknown", msg: "Referee shirt colour no longer exists" }; continue; }
+    const d = contrast(rk, g, teamKits);
+    if (d < th) out[g.id] = { level: "clash", msg: `Referee shirt too similar to a team (ΔE ${Math.round(d)})` };
+  }
+  return out;
+}
+
+// Pick the officials' shirt per game. Run AFTER the team kits are set (pass the
+// games with the team kit proposal applied). Per day:
+//   1. one colour for the whole day if one contrasts with every game;
+//   2. otherwise game by game in time order: fewest officials changing colour
+//      (each official's previous game that day; without officials: the court's
+//      previous game) › best contrast › earlier in the list.
+// Locked game.kit.R stays unless opts.overwrite.
+// → { proposals: [{ gameId, side: "R", from, to }], games, unresolvable: [gameId] }
+export function suggestRefShirts(games, teamKits, refKits, opts = {}) {
+  const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
+  const list = usable(refKits);
+  const inScope = (g) => !opts.days?.length || opts.days.includes(g.date);
+  const work = [...games].sort(byTime).map((g) => ({ ...g, kit: { ...(g.kit || {}) } }));
+  const unresolvable = [];
+  if (!list.length) return { proposals: [], games: work, unresolvable };
+  const locked = (g) => !opts.overwrite && !!g.kit.R && list.some((r) => r.id === g.kit.R);
+  const ok = (r, g) => contrast(r, g, teamKits) >= th;
+  const officials = (g) => ["r1", "r2", "clerk", "a1", "a2"].map((s) => String(g.refs?.[s] ?? "").trim().toLowerCase()).filter(Boolean);
+
+  for (const date of [...new Set(work.map((g) => g.date))]) {
+    const day = work.filter((g) => g.date === date);
+    const todo = day.filter((g) => inScope(g) && !locked(g));
+    if (!todo.length) continue;
+    const solvable = todo.filter((g) => list.some((r) => ok(r, g)));
+    for (const g of todo) if (!solvable.includes(g)) unresolvable.push(g.id);
+
+    // 1. One colour for the whole day (that also fits the locked games).
+    const fixed = day.filter((g) => !todo.includes(g) && g.kit.R).map((g) => g.kit.R);
+    const allDay = list
+      .filter((r) => solvable.every((g) => ok(r, g)) && fixed.every((id) => id === r.id))
+      .map((r, i) => ({ r, i, c: Math.min(...solvable.map((g) => contrast(r, g, teamKits))) }))
+      .sort((a, b) => b.c - a.c || a.i - b.i)[0];
+    if (allDay) { for (const g of solvable) g.kit.R = allDay.r.id; continue; }
+
+    // 2. Game by game.
+    const lastOf = new Map(); // official or "court:N" → colour id
+    for (const g of day) {
+      const who = officials(g);
+      const keys = who.length ? who : ["court:" + g.court];
+      if (solvable.includes(g)) {
+        const best = list
+          .map((r, i) => ({ r, i, c: contrast(r, g, teamKits), ch: keys.filter((k) => lastOf.has(k) && lastOf.get(k) !== r.id).length }))
+          .filter((x) => x.c >= th)
+          .sort((a, b) => a.ch - b.ch || b.c - a.c || a.i - b.i)[0];
+        g.kit.R = best.r.id;
+      }
+      if (g.kit.R) for (const k of keys) lastOf.set(k, g.kit.R);
+    }
+  }
+
+  const orig = new Map(games.map((g) => [g.id, g.kit?.R ?? ""]));
+  const proposals = work.filter((g) => (g.kit.R ?? "") !== orig.get(g.id)).map((g) => ({ gameId: g.id, side: "R", from: orig.get(g.id), to: g.kit.R ?? "" }));
+  return { proposals, games: work, unresolvable };
+}

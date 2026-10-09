@@ -315,6 +315,17 @@ export async function setTeamKits(teamName, kits) {
   const eid = reqEid();
   await setDoc(teamKitsRef(eid), { eventId: eid, kits: { [teamName]: kits } }, { merge: true });
 }
+// Referee shirt colours of the event, in preference order: [{ id, name, shirt }].
+// Same public doc; a game's officials wear one of them (game.kit.R = id, via saveGameKit).
+export function subscribeRefKits(cb) {
+  return onSnapshot(teamKitsRef(reqEid()),
+    (d) => cb(d.exists() ? d.data().refKits || [] : []),
+    (err) => { console.warn("referee shirts unavailable:", err?.code || err); cb([]); });
+}
+export async function setRefKits(refKits) {
+  const eid = reqEid();
+  await setDoc(teamKitsRef(eid), { eventId: eid, refKits }, { merge: true });
+}
 
 /* ----------------- logo library + event branding ----------------- */
 // Reusable logo library (global). Each logo is { name, dataUrl } (small PNG).
@@ -679,6 +690,7 @@ export async function saveGameRefs(gameId, refs) {
 
 // Uniform a team wears in a game (referees decide per day, sometimes per game).
 // side is "A" or "B"; kit is the team's uniform number (1 or 2, see team kits),
+// or side "R" with the id of the officials' shirt colour (see setRefKits),
 // or "" to clear. Older events stored a shirt hex string here. Mirrored onto
 // the public result so the spectator app can show it too.
 export async function saveGameKit(gameId, side, kit) {

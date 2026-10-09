@@ -107,3 +107,67 @@ test("teams without kits are left alone", () => {
   const res = suggestKits([g], tk);
   assert.deepEqual(kitOf(res, g), { A: 1 });
 });
+
+/* ---------- referee shirts ---------- */
+import { checkRefShirts, suggestRefShirts } from "./kits.js";
+
+const REF = [{ id: "y", name: "Yellow", shirt: YELLOW }, { id: "k", name: "Black", shirt: BLACK }, { id: "r", name: "Red", shirt: RED }];
+const refOf = (res, g) => res.games.find((x) => x.id === g.id).kit.R;
+
+test("checkRefShirts: clash with a team shirt, unresolvable, unknown colour", () => {
+  const tk = { A: [kit(YELLOW)], B: [kit(BLUE)], C: [kit(BLACK)], D: [kit(RED)] };
+  const g1 = game("A", "B", D1, "09:00", { kit: { A: 1, B: 1, R: "y" } });
+  const g2 = game("A", "B", D1, "10:00", { kit: { A: 1, B: 1, R: "k" } });
+  const g3 = game("A", "C", D1, "11:00", { kit: { A: 1, B: 1 } });
+  const g4 = game("C", "D", D1, "12:00", { kit: { A: 1, B: 1, R: "gone" } });
+  const res = checkRefShirts([g1, g2, g3, g4], tk, REF);
+  assert.equal(res[g1.id].level, "clash");
+  assert.equal(res[g2.id], undefined);
+  assert.equal(res[g4.id].level, "unknown");
+  // Without red, yellow v black leaves no contrasting colour.
+  const g5 = game("A", "C", D1, "13:00", { kit: { A: 1, B: 1 } });
+  const res2 = checkRefShirts([g5], tk, REF.slice(0, 2));
+  assert.equal(res2[g5.id].level, "unresolvable");
+  assert.deepEqual(checkRefShirts([g1], tk, []), {});
+});
+
+test("suggestRefShirts: one colour for the whole day when it fits every game", () => {
+  const tk = { A: [kit(WHITE)], B: [kit(BLUE)], C: [kit(RED)] };
+  const gs = [game("A", "B", D1, "09:00", { kit: { A: 1, B: 1 } }), game("B", "C", D1, "10:00", { kit: { A: 1, B: 1 } })];
+  const res = suggestRefShirts(gs, tk, REF);
+  assert.equal(refOf(res, gs[1]), refOf(res, gs[0]));
+  assert.ok(["y", "k"].includes(refOf(res, gs[0])));
+  assert.deepEqual(res.unresolvable, []);
+  assert.deepEqual(checkRefShirts(res.games, tk, REF), {});
+});
+
+test("suggestRefShirts: never clashes; keeps an official's colour where possible", () => {
+  // Game 1 has a yellow team, game 2 a black team, game 3 neither.
+  const tk = { Y: [kit(YELLOW)], K: [kit(BLACK)], W: [kit(WHITE)], B: [kit(BLUE)] };
+  const refs = { r1: "Sepp", r2: "Dan" };
+  const g1 = game("Y", "W", D1, "09:00", { kit: { A: 1, B: 1 }, refs });
+  const g2 = game("K", "B", D1, "10:00", { kit: { A: 1, B: 1 }, refs: { r1: "Ida", r2: "Ola" } });
+  const g3 = game("W", "B", D1, "11:00", { kit: { A: 1, B: 1 }, refs });
+  const res = suggestRefShirts([g1, g2, g3], tk, REF);
+  assert.deepEqual(checkRefShirts(res.games, tk, REF), {});
+  assert.notEqual(refOf(res, g1), "y");
+  assert.notEqual(refOf(res, g2), "k");
+  // Sepp and Dan keep the colour of their first game in game 3.
+  assert.equal(refOf(res, g3), refOf(res, g1));
+});
+
+test("suggestRefShirts: locked colours stay unless overwrite; unresolvable reported", () => {
+  const tk = { A: [kit(WHITE)], B: [kit(BLUE)], Y: [kit(YELLOW)], K: [kit(BLACK)] };
+  const g1 = game("A", "B", D1, "09:00", { kit: { A: 1, B: 1, R: "r" } });
+  const g2 = game("Y", "K", D1, "10:00", { kit: { A: 1, B: 1 } });
+  const res = suggestRefShirts([g1, g2], tk, REF.slice(0, 2));
+  assert.equal(refOf(res, g1), "k"); // "r" isn't in this list any more → replaced
+  const res2 = suggestRefShirts([g1, g2], tk, REF);
+  assert.equal(refOf(res2, g1), "r");
+  assert.ok(!res2.proposals.some((p) => p.gameId === g1.id));
+  assert.deepEqual(suggestRefShirts([g2], tk, REF.slice(0, 2)).unresolvable, [g2.id]);
+  // A locked colour that clashes is kept — unless overwriting.
+  const g3 = game("Y", "B", D1, "11:00", { kit: { A: 1, B: 1, R: "y" } });
+  assert.equal(refOf(suggestRefShirts([g3], tk, REF), g3), "y");
+  assert.notEqual(refOf(suggestRefShirts([g3], tk, REF, { overwrite: true }), g3), "y");
+});

@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { suggestKits, checkKits, countChanges } from "../officials/kits.js";
+import { suggestKits, checkKits, countChanges, suggestRefShirts, checkRefShirts } from "../officials/kits.js";
 import { resolveKit } from "../kits.js";
 import { KitSwatch } from "../KitSwatch.jsx";
 
 const shortTeam = (t) => String(t?.name || t || "").split(" - ")[0];
+const REF_ROW = "\u0000officials";
 const sum = (o) => Object.values(o).reduce((s, d) => s + Object.values(d).reduce((a, b) => a + b, 0), 0);
 
 // "Suggest uniforms": compute a kit proposal (src/officials/kits.js), show per
 // day and team which uniform it wears (and where it changes), write only on Apply.
-export default function SuggestKitsModal({ games, teamKits, threshold, days, day, dayLabel, onApply, onClose }) {
+export default function SuggestKitsModal({ games, teamKits, refKits = [], threshold, days, day, dayLabel, onApply, onClose }) {
   const [scope, setScope] = useState(day === "all" ? "all" : day);
   const [overwrite, setOverwrite] = useState(false);
   const [res, setRes] = useState(null);
@@ -19,10 +20,17 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
     setBusy(true); setRes(null);
     setTimeout(() => {
       try {
+        // Team uniforms first, then the officials' shirts against them.
         const r = suggestKits(games, teamKits, opts);
+        const rs = suggestRefShirts(r.games, teamKits, refKits, opts);
         const before = checkKits(games, teamKits, opts);
         const inScope = (g) => !opts.days.length || opts.days.includes(g.date);
-        setRes({ ...r, clashesBefore: Object.values(before).filter((x) => x.level === "clash").length, changesBefore: sum(countChanges(games.filter(inScope))) });
+        const refBad = (gs) => Object.values(checkRefShirts(gs.filter(inScope), teamKits, refKits, opts)).filter((x) => x.level !== "unresolvable").length;
+        setRes({
+          ...r, games: rs.games, proposals: [...r.proposals, ...rs.proposals], refUnresolvable: rs.unresolvable,
+          clashesBefore: Object.values(before).filter((x) => x.level === "clash").length, changesBefore: sum(countChanges(games.filter(inScope))),
+          refBefore: refBad(games), refAfter: refBad(rs.games),
+        });
       } catch (e) { alert("Suggest uniforms failed: " + (e?.message || e)); }
       setBusy(false);
     }, 30);
@@ -50,12 +58,16 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
         }
       }
       const rows = [...teams].filter(([, xs]) => xs.some((x) => x.changed)).sort(([a], [b]) => a.localeCompare(b));
+      // Officials' shirts of the day, in game order.
+      const refs = res.games.filter((x) => x.date === d && x.kit?.R).map((g) => ({ g, v: g.kit.R, changed: changed.has(g.id + "R") }));
+      if (refs.some((x) => x.changed)) rows.push([REF_ROW, refs]);
       if (rows.length) out.push({ d, rows });
     }
     return out;
   })();
 
   const nChanges = res ? sum(res.changes) : 0;
+  const refLabel = (id) => { const r = refKits.find((x) => x.id === id); return r ? <><KitSwatch kit={{ shirt: r.shirt }} size={14} /> {r.name}</> : "—"; };
   const delta = (a, b) => (a === b ? <b>{b}</b> : <><s className="muted-sm">{a}</s> → <b>{b}</b></>);
 
   return (
@@ -63,7 +75,7 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
       <div className="modal aa-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <button className="modal-x" onClick={onClose} aria-label="Close" disabled={busy}>✕</button>
         <h3 className="modal-title">Suggest uniforms</h3>
-        <p className="muted-sm">Picks each team's uniform so no game has similar shirts: one uniform per team and day where possible (otherwise as few changes as possible), alternating between days. Nothing is saved until you click Apply.</p>
+        <p className="muted-sm">Picks each team's uniform so no game has similar shirts: one uniform per team and day where possible (otherwise as few changes as possible), alternating between days. Then the officials' shirt per game, contrasting with both teams. Nothing is saved until you click Apply.</p>
 
         <div className="aa-opts">
           <label>Days{" "}
@@ -85,8 +97,10 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
               <span>{res.proposals.length ? <><b>{res.proposals.length}</b> uniform{res.proposals.length === 1 ? "" : "s"} set</> : "No changes"}</span>
               <span>Clashes {delta(res.clashesBefore, res.clashes.length)}</span>
               <span>Kit changes {delta(res.changesBefore, nChanges)}</span>
+              {refKits.length > 0 && <span>Referee shirt clashes {delta(res.refBefore, res.refAfter)}</span>}
             </div>
             {res.unresolvable.length > 0 && <p className="muted-sm">{res.unresolvable.length} game{res.unresolvable.length === 1 ? "" : "s"} can't be resolved — every uniform combination of the two teams clashes.</p>}
+            {res.refUnresolvable.length > 0 && <p className="muted-sm">{res.refUnresolvable.length} game{res.refUnresolvable.length === 1 ? "" : "s"} without a fitting referee shirt — no colour contrasts with both teams.</p>}
             {Object.entries(res.changes).length > 0 && (
               <p className="warn-box">Teams that must change uniform during a day: {Object.entries(res.changes).map(([t, ds]) => Object.entries(ds).map(([d, n]) => `${shortTeam(t)} ${n}× on ${dayLabel(d)}`).join(", ")).join("; ")}</p>
             )}
@@ -98,10 +112,10 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
                     {view.flatMap(({ d, rows }) => rows.map(([t, xs], i) => (
                       <tr key={d + t}>
                         <td>{i === 0 ? dayLabel(d) : ""}</td>
-                        <td>{shortTeam(t)}</td>
+                        <td>{t === REF_ROW ? <i>Officials</i> : shortTeam(t)}</td>
                         <td className="sk-seq">{xs.map(({ g, v, changed }) => (
                           <span key={g.id} className={`sk-item ${changed ? "sk-new" : ""}`} title={`#${g.nr} ${g.time}${changed ? " — new" : ""}`}>
-                            <span className="muted-sm">#{g.nr}</span> <KitSwatch kit={resolveKit(v, teamKits[t])} size={14} /> {typeof v === "number" ? v : "—"}
+                            <span className="muted-sm">#{g.nr}</span> {t === REF_ROW ? refLabel(v) : <><KitSwatch kit={resolveKit(v, teamKits[t])} size={14} /> {typeof v === "number" ? v : "—"}</>}
                           </span>
                         ))}</td>
                       </tr>

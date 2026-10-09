@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { subscribeGames, saveGameKit, subscribeTeamKits, setTeamKits, updateEventFields } from "../cloud.js";
+import { subscribeGames, saveGameKit, subscribeTeamKits, setTeamKits, updateEventFields, subscribeRefKits, setRefKits } from "../cloud.js";
 import { resolveKit } from "../kits.js";
 import { KitSwatch } from "../KitSwatch.jsx";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
-import { checkKits, countChanges, DEFAULT_KIT_RULES } from "../officials/kits.js";
+import { checkKits, checkRefShirts, countChanges, DEFAULT_KIT_RULES } from "../officials/kits.js";
 import SuggestKitsModal from "./SuggestKitsModal.jsx";
 
-const KIT_BADGE = { clash: ["Clash", "kb-clash"], unresolvable: ["Can't resolve", "kb-unres"] };
+const KIT_BADGE = { clash: ["Clash", "kb-clash"], unresolvable: ["Can't resolve", "kb-unres"], unknown: ["Unknown colour", "kb-unres"] };
 
 // Common uniform colours. value is the stored hex; label for the tooltip.
 const PALETTE = [
@@ -60,6 +60,7 @@ export default function Colors() {
   const { eventId, event, isAdmin, archived } = useEvent();
   const [games, setGames] = useState([]);
   const [teamKits, setTeamKitsState] = useState({});
+  const [refKits, setRefKitsState] = useState([]);
   const [day, setDay] = useState("all");
   const [q, setQ] = useState("");
   const [bulk, setBulk] = useState({ team: "", date: "", kit: "" });
@@ -68,6 +69,7 @@ export default function Colors() {
 
   useEffect(() => subscribeGames(setGames), []);
   useEffect(() => subscribeTeamKits(setTeamKitsState), []);
+  useEffect(() => subscribeRefKits(setRefKitsState), []);
 
   const days = useMemo(() => [...new Set(games.map((g) => g.date).filter(Boolean))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
   // Registered teams (Settings → Teams); falls back to the names on the games.
@@ -81,6 +83,7 @@ export default function Colors() {
   const threshold = Number(event?.kitThreshold) || DEFAULT_KIT_RULES.threshold;
   const kitIssues = useMemo(() => checkKits(games, teamKits, { threshold }), [games, teamKits, threshold]);
   const kitChanges = useMemo(() => countChanges(games), [games]);
+  const refIssues = useMemo(() => checkRefShirts(games, teamKits, refKits, { threshold }), [games, teamKits, refKits, threshold]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     return games
@@ -106,7 +109,7 @@ export default function Colors() {
     const n = Math.round(Number(v));
     if (n >= 5 && n <= 80 && n !== threshold) updateEventFields({ kitThreshold: n }).catch(fail);
   };
-  const nIssues = (lvl) => Object.entries(kitIssues).filter(([id, x]) => x.level === lvl && (day === "all" || games.find((g) => g.id === id)?.date === day)).length;
+  const nIssues = (lvl, issues = kitIssues) => Object.entries(issues).filter(([id, x]) => x.level === lvl && (day === "all" || games.find((g) => g.id === id)?.date === day)).length;
   const changeHints = Object.entries(kitChanges).flatMap(([t, ds]) => Object.entries(ds).filter(([d]) => day === "all" || d === day).map(([d, n]) => `${shortTeam({ name: t })} ${n}× on ${dayLabel(d)}`));
   const applyBulk = async () => {
     const { team, date, kit } = bulk;
@@ -133,6 +136,22 @@ export default function Colors() {
           <option value="1">Uniform 1</option>
           <option value="2">Uniform 2</option>
           {typeof v === "string" && v && <option value="legacy" disabled>Shirt only (old)</option>}
+        </select>
+      </>
+    );
+  };
+
+  // Officials' shirt per game (game.kit.R = colour id).
+  const refSelect = (g) => {
+    const v = g.kit?.R || "";
+    const rk = refKits.find((r) => r.id === v);
+    return (
+      <>
+        <KitSwatch kit={rk ? { shirt: rk.shirt } : null} size={16} />
+        <select className="kit-sel" value={v} disabled={archived} onChange={(e) => setKit(g, "R", e.target.value)} aria-label="Referee shirt">
+          <option value="">—</option>
+          {refKits.filter((r) => r.shirt).map((r) => <option key={r.id} value={r.id}>{r.name || r.shirt}</option>)}
+          {v && !rk && <option value={v} disabled>(deleted colour)</option>}
         </select>
       </>
     );
@@ -167,6 +186,8 @@ export default function Colors() {
         </div>
       </div>
 
+      <RefShirtsCard refKits={refKits} archived={archived} onSave={(list) => setRefKits(list).catch(fail)} />
+
       {!archived && (
         <div className="card" style={{ maxWidth: "none" }}>
           <div className="bulk-row">
@@ -200,18 +221,22 @@ export default function Colors() {
       <div className="rg-summary">
         {nIssues("clash") ? <span className="rg-pill rg-pill-hard">{nIssues("clash")} clash{nIssues("clash") === 1 ? "" : "es"}</span> : <span className="rg-pill rg-pill-ok">No clashes</span>}
         {nIssues("unresolvable") > 0 && <span className="rg-pill rg-pill-missing" title="Every uniform combination of the two teams clashes">{nIssues("unresolvable")} can't be resolved</span>}
-        {!archived && <button className="btn primary sm" onClick={() => setSuggestOpen(true)} disabled={!Object.keys(teamKits).length} title={Object.keys(teamKits).length ? "" : "Register team uniforms first"}>Suggest uniforms…</button>}
+        {refKits.length > 0 && (nIssues("clash", refIssues) + nIssues("unknown", refIssues)
+          ? <span className="rg-pill rg-pill-hard">{nIssues("clash", refIssues) + nIssues("unknown", refIssues)} referee shirt clash{nIssues("clash", refIssues) + nIssues("unknown", refIssues) === 1 ? "" : "es"}</span>
+          : null)}
+        {refKits.length > 0 && nIssues("unresolvable", refIssues) > 0 && <span className="rg-pill rg-pill-missing" title="No referee shirt colour contrasts with both teams">{nIssues("unresolvable", refIssues)} without a fitting referee shirt</span>}
+        {!archived && <button className="btn primary sm" onClick={() => setSuggestOpen(true)} disabled={!Object.keys(teamKits).length && !refKits.length} title={Object.keys(teamKits).length || refKits.length ? "" : "Register team uniforms first"}>Suggest uniforms…</button>}
         <label className="rg-only" title="Colour distance (ΔE, CIE76) below which two shirts count as a clash. Higher = stricter. Shorts are ignored.">
           Clash below ΔE <input type="number" min="5" max="80" key={threshold} defaultValue={threshold} disabled={archived} style={{ width: 56 }}
             onBlur={(e) => setThreshold(e.target.value)} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
         </label>
       </div>
       {changeHints.length > 0 && <p className="muted-sm">Uniform changes during a day: {changeHints.join(", ")}</p>}
-      {suggestOpen && <SuggestKitsModal games={games} teamKits={teamKits} threshold={threshold} days={days} day={day} dayLabel={dayLabel} onApply={applySuggestion} onClose={() => setSuggestOpen(false)} />}
+      {suggestOpen && <SuggestKitsModal games={games} teamKits={teamKits} refKits={refKits} threshold={threshold} days={days} day={day} dayLabel={dayLabel} onApply={applySuggestion} onClose={() => setSuggestOpen(false)} />}
 
       <div className="grid-scroll">
         <table className="ref-grid">
-          <thead><tr><th className="rg-game">Game</th><th>Team A uniform</th><th>Team B uniform</th></tr></thead>
+          <thead><tr><th className="rg-game">Game</th><th>Team A uniform</th><th>Team B uniform</th>{refKits.length > 0 && <th>Referee shirt</th>}</tr></thead>
           <tbody>
             {shown.length === 0 && <tr><td className="muted-sm" colSpan={3}>No games.</td></tr>}
             {shown.map((g) => (
@@ -223,11 +248,49 @@ export default function Colors() {
                 </td>
                 <td className="clr-cell"><span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} {kitSelect(g, "A")}</td>
                 <td className="clr-cell"><span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)} {kitSelect(g, "B")}</td>
+                {refKits.length > 0 && <td className="clr-cell">{refSelect(g)}{refIssues[g.id] && <div><span className={`kit-badge ${KIT_BADGE[refIssues[g.id].level][1]}`} title={refIssues[g.id].msg}>{KIT_BADGE[refIssues[g.id].level][0]}</span></div>}</td>}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     </>
+  );
+}
+
+// The event's referee shirt colours, in preference order. All officials of a
+// game wear one of them; "Suggest uniforms" picks one per game that contrasts
+// with both teams.
+function RefShirtsCard({ refKits, archived, onSave }) {
+  const [names, setNames] = useState({}); // id -> name being typed
+  const update = (i, patch) => onSave(refKits.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const move = (i, d) => { const l = [...refKits]; [l[i], l[i + d]] = [l[i + d], l[i]]; onSave(l); };
+  const add = () => onSave([...refKits, { id: Date.now().toString(36), name: "", shirt: "" }]);
+  return (
+    <div className="card" style={{ maxWidth: "none" }}>
+      <h2>Referee shirts</h2>
+      <p className="muted-sm" style={{ marginTop: -6 }}>Shirt colours the officials have at this event, most preferred first. All officials of a game wear the same colour; "Suggest uniforms" picks one that contrasts with both teams.</p>
+      {refKits.length > 0 && (
+        <div className="rs-list">
+          {refKits.map((r, i) => (
+            <div key={r.id} className="rs-row">
+              <ColorPick what="shirt" value={r.shirt || ""} disabled={archived} onPick={(c) => update(i, { shirt: c })} />
+              <input className="of-input" value={names[r.id] ?? r.name ?? ""} disabled={archived} placeholder="Name, e.g. Yellow"
+                onChange={(e) => setNames((p) => ({ ...p, [r.id]: e.target.value }))}
+                onBlur={() => { if (names[r.id] !== undefined && names[r.id] !== r.name) update(i, { name: names[r.id].trim() }); setNames((p) => { const n = { ...p }; delete n[r.id]; return n; }); }}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} aria-label="Colour name" />
+              {!archived && (
+                <>
+                  <button className="btn sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up" title="Prefer this colour">↑</button>
+                  <button className="btn sm" onClick={() => move(i, 1)} disabled={i === refKits.length - 1} aria-label="Move down">↓</button>
+                  <button className="btn danger sm" onClick={() => onSave(refKits.filter((_, j) => j !== i))} aria-label="Remove">✕</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {!archived && <button className="btn sm" style={{ marginTop: 8 }} onClick={add}>+ Add colour</button>}
+    </div>
   );
 }
