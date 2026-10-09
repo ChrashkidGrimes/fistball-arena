@@ -1,7 +1,7 @@
 // Uniform (kit) selection — pure logic, see docs/referee-assignment-spec.md §4.
 //
 // Colours: two shirts clash when their CIE76 ΔE (Lab) is below the threshold.
-// Shorts never clash; similar shorts only cost a small penalty.
+// Only shirts count — shorts are ignored.
 //
 // suggestKits(games, teamKits, opts) → {
 //   proposals: [{ gameId, side: "A"|"B", from, to }],
@@ -16,12 +16,12 @@
 //   2. otherwise the fewest kit changes: DP over the day's time slots, state =
 //      every team's current kit.
 // Objectives (lexicographic): no clash › fewest changes › wear the OTHER kit
-// than the previous day › Uniform 1 › no similar shorts.
+// than the previous day › Uniform 1.
 
 import { resolveKit } from "../kits.js";
 import { parseSlots } from "./model.js";
 
-export const DEFAULT_KIT_RULES = { threshold: 25, maxExhaustive: 16 };
+export const DEFAULT_KIT_RULES = { threshold: 35, maxExhaustive: 16 };
 
 /* ---------- colour distance ---------- */
 function hexToRgb(hex) {
@@ -56,7 +56,6 @@ const byTime = (a, b) => dateNum(a.date) - dateNum(b.date) || timeKey(a.time).lo
 // Registered kit numbers of a team (a kit counts when it has a shirt colour).
 export const kitNumbers = (kits) => [1, 2].filter((n) => kits?.[n - 1]?.shirt);
 const shirtOf = (v, kits) => resolveKit(v, kits)?.shirt || "";
-const shortsOf = (v, kits) => resolveKit(v, kits)?.shorts || "";
 
 // Can these two teams ever play without a clash (any combination of their kits)?
 function resolvable(kitsA, kitsB, th, optsA = kitNumbers(kitsA), optsB = kitNumbers(kitsB)) {
@@ -65,7 +64,7 @@ function resolvable(kitsA, kitsB, th, optsA = kitNumbers(kitsA), optsB = kitNumb
 }
 
 // Status of each game's CURRENT kits, for the badges on the Uniforms page:
-// { [gameId]: { level: "clash" | "unresolvable" | "shorts", msg } } (only games with an issue).
+// { [gameId]: { level: "clash" | "unresolvable", msg } } (only games with an issue).
 export function checkKits(games, teamKits, opts = {}) {
   const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
   const out = {};
@@ -76,9 +75,7 @@ export function checkKits(games, teamKits, opts = {}) {
     const sA = shirtOf(vA, kA), sB = shirtOf(vB, kB);
     if (!sA || !sB) continue;
     const d = deltaE(sA, sB);
-    if (d < th) { out[g.id] = { level: "clash", msg: `Shirts too similar (ΔE ${Math.round(d)})` }; continue; }
-    const dS = deltaE(shortsOf(vA, kA), shortsOf(vB, kB));
-    if (dS < th) out[g.id] = { level: "shorts", msg: `Similar shorts (ΔE ${Math.round(dS)})` };
+    if (d < th) out[g.id] = { level: "clash", msg: `Shirts too similar (ΔE ${Math.round(d)})` };
   }
   return out;
 }
@@ -114,8 +111,8 @@ function dayKitOf(team, dayGames) {
   return tied.includes(lastV) ? lastV : tied[0];
 }
 
-// Lexicographic cost tuples: [clashes, changes, sameAsPrevDay, uniform2, shorts].
-const ZERO = [0, 0, 0, 0, 0];
+// Lexicographic cost tuples: [clashes, changes, sameAsPrevDay, uniform2].
+const ZERO = [0, 0, 0, 0];
 const add = (a, b) => a.map((x, i) => x + b[i]);
 const less = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]; return false; };
 
@@ -186,10 +183,7 @@ export function suggestKits(games, teamKits, opts = {}) {
       }
       const tA = name(g.teamA), tB = name(g.teamB);
       const vA = sideVal(g, "A", state), vB = sideVal(g, "B", state);
-      if (vA && vB && !unres.has(g.id)) {
-        if (deltaE(shirtOf(vA, teamKits[tA]), shirtOf(vB, teamKits[tB])) < th) c[0]++;
-        else if (deltaE(shortsOf(vA, teamKits[tA]), shortsOf(vB, teamKits[tB])) < th) c[4]++;
-      }
+      if (vA && vB && !unres.has(g.id) && deltaE(shirtOf(vA, teamKits[tA]), shirtOf(vB, teamKits[tB])) < th) c[0]++;
       for (const [t, v] of [[tA, vA], [tB, vB]]) {
         if (typeof v !== "number" || !vi.has(t)) continue;
         if (prevKit.has(t) && prevKit.get(t) === v) c[2]++;
@@ -232,7 +226,7 @@ export function suggestKits(games, teamKits, opts = {}) {
           for (let s = 0; s < N; s++) {
             const o = s ^ (1 << i);
             if (!d[o]) continue;
-            const cand = add(d[o], [0, 1, 0, 0, 0]);
+            const cand = add(d[o], [0, 1, 0, 0]);
             if (!d[s] || less(cand, d[s])) { d[s] = cand; src[s] = src[o]; }
           }
         }

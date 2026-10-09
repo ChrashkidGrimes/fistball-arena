@@ -9,7 +9,7 @@ import { flagFor } from "../flags.js";
 import { checkKits, countChanges, DEFAULT_KIT_RULES } from "../officials/kits.js";
 import SuggestKitsModal from "./SuggestKitsModal.jsx";
 
-const KIT_BADGE = { clash: ["Clash", "kb-clash"], unresolvable: ["Can't resolve", "kb-unres"], shorts: ["Similar shorts", "kb-shorts"] };
+const KIT_BADGE = { clash: ["Clash", "kb-clash"], unresolvable: ["Can't resolve", "kb-unres"] };
 
 // Common uniform colours. value is the stored hex; label for the tooltip.
 const PALETTE = [
@@ -200,9 +200,8 @@ export default function Colors() {
       <div className="rg-summary">
         {nIssues("clash") ? <span className="rg-pill rg-pill-hard">{nIssues("clash")} clash{nIssues("clash") === 1 ? "" : "es"}</span> : <span className="rg-pill rg-pill-ok">No clashes</span>}
         {nIssues("unresolvable") > 0 && <span className="rg-pill rg-pill-missing" title="Every uniform combination of the two teams clashes">{nIssues("unresolvable")} can't be resolved</span>}
-        {nIssues("shorts") > 0 && <span className="rg-pill rg-pill-soft">{nIssues("shorts")} similar shorts</span>}
         {!archived && <button className="btn primary sm" onClick={() => setSuggestOpen(true)} disabled={!Object.keys(teamKits).length} title={Object.keys(teamKits).length ? "" : "Register team uniforms first"}>Suggest uniforms…</button>}
-        <label className="rg-only" title="Colour distance (ΔE, CIE76) below which two shirts count as a clash. Higher = stricter.">
+        <label className="rg-only" title="Colour distance (ΔE, CIE76) below which two shirts count as a clash. Higher = stricter. Shorts are ignored.">
           Clash below ΔE <input type="number" min="5" max="80" key={threshold} defaultValue={threshold} disabled={archived} style={{ width: 56 }}
             onBlur={(e) => setThreshold(e.target.value)} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
         </label>

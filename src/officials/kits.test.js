@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deltaE, checkKits, countChanges, suggestKits } from "./kits.js";
+import { deltaE, checkKits, countChanges, suggestKits, DEFAULT_KIT_RULES } from "./kits.js";
 
 const WHITE = "#ffffff", OFFWHITE = "#f4f4f0", BLACK = "#1a1a1a", RED = "#e23b3b", BLUE = "#2f6df0", NAVY = "#1c2c66", YELLOW = "#f2c20a";
 const kit = (shirt, shorts = "") => ({ shirt, shorts });
@@ -10,6 +10,7 @@ const kitOf = (res, g) => res.games.find((x) => x.id === g.id).kit;
 const D1 = "12/09/26", D2 = "13/09/26", D3 = "14/09/26";
 
 test("deltaE: identical 0, white/off-white close, white/black far, invalid = Infinity", () => {
+  assert.equal(DEFAULT_KIT_RULES.threshold, 35);
   assert.equal(deltaE(WHITE, WHITE), 0);
   assert.ok(deltaE(WHITE, OFFWHITE) < 25);
   assert.ok(deltaE(WHITE, BLACK) > 90);
@@ -18,7 +19,7 @@ test("deltaE: identical 0, white/off-white close, white/black far, invalid = Inf
   assert.equal(deltaE("#fff", WHITE), 0);
 });
 
-test("checkKits: clash, similar shorts, unresolvable", () => {
+test("checkKits: clash and unresolvable; shorts are ignored", () => {
   const tk = {
     W: [kit(WHITE, BLACK), kit(RED, BLACK)],
     O: [kit(OFFWHITE, BLACK), kit(BLUE, WHITE)],
@@ -30,7 +31,7 @@ test("checkKits: clash, similar shorts, unresolvable", () => {
   const g4 = game("W", "O", D1, "13:00", { kit: { A: 2, B: 2 } });
   const res = checkKits([g1, g2, g3, g4], tk);
   assert.equal(res[g1.id].level, "clash");
-  assert.equal(res[g2.id].level, "shorts");
+  assert.equal(res[g2.id], undefined); // same shorts, different shirts → fine
   assert.equal(res[g3.id].level, "unresolvable");
   assert.equal(res[g4.id], undefined);
 });
