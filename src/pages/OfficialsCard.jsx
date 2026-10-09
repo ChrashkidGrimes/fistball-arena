@@ -65,7 +65,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
   return (
     <details className="adv-tool officials-card">
       <summary>Officials ({refs.length}) — roles, nation / club, availability</summary>
-      <p className="muted-sm">Who may fill which slot, conflicts (no games of their own club; referees and line judges also none of their own nation — the scorer's nation doesn't matter), and availability per day. Empty roles = any slot; no entry for a day = available all day. Two people with the same LR pair always work the lines together. Saved automatically.</p>
+      <p className="muted-sm">Who may fill which slot, conflicts (no games of their own club; referees none of their own nation — for scorers and line judges the nation doesn't matter, a referee working the lines for their own nation gets a warning), and availability per day. Empty roles = any slot; no entry for a day = available all day. Two people with the same LR pair always work the lines together. Saved automatically.</p>
       <datalist id="of-nations">{teamNations.map((n) => <option key={n} value={n} />)}</datalist>
       <datalist id="of-pairs">{pairs.map((n) => <option key={n} value={n} />)}</datalist>
       <div className="grid-scroll">
