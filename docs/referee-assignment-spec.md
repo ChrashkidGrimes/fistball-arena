@@ -291,9 +291,9 @@ colour** — one value per game.
 - The event's available referee shirt colours live in the existing public doc
   `public/teamkits_{eid}` as `refKits: [{ id, name, shirt }]` (e.g.
   `{ id: "y", name: "Yellow", shirt: "#f5d000" }`), so Fistball Live can show
-  them too. List order = preference order.
+  them too. There is **no preference** between the colours.
 - Edited in a new "Referee shirts" card on the Uniforms page (`Colors.jsx`):
-  add / rename / recolour / reorder / delete.
+  add / rename / recolour / delete.
 - Per game: `game.kit.R = refKitId` (or `""`), written via the existing
   `saveGameKit(gameId, "R", id)` and mirrored to the public result like the
   team kits.
@@ -311,13 +311,13 @@ colour** — one value per game.
    (uses the officials assignment from section 3 when present; otherwise
    minimise changes per court per day).
 3. Prefer the larger minimum ΔE to both team shirts (better contrast).
-4. Prefer colours earlier in the event's list.
+Exact ties go to the colour used least so far (neutral; no colour is
+preferred).
 
 **Algorithm:** run after the team kit solver (team kits first, then referee
-shirts). Per day, the same DP as 4.4 over time slots, with one variable per
-official (or per court) and the referee colours as values; the candidate set per
-game is small, so this stays cheap. Manually set `game.kit.R` values are fixed
-unless the admin chooses "overwrite".
+shirts). Per day: one colour for the whole day if one contrasts with every game;
+otherwise game by game in time order by the objective above. Manually set
+`game.kit.R` values are fixed unless the admin chooses "overwrite".
 
 **UI:** a referee-shirt column on the Uniforms page with clash badges, included
 in the "Suggest uniforms" diff modal and applied in the same step.
