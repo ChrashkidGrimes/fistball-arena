@@ -30,7 +30,7 @@ export default function AppShell({ me, onSignOut }) {
       { key: "arrange", label: "Schedule", Icon: IconSchedule },
       { key: "roster", label: "Players & staff", Icon: IconRoster },
       { key: "referees", label: "Referees", Icon: IconWhistle },
-      { key: "colors", label: "Shirt colors", Icon: IconShirt },
+      { key: "colors", label: "Uniforms", Icon: IconShirt },
       { key: "settings", label: "Settings", Icon: IconSettings },
     ] : []),
   ];

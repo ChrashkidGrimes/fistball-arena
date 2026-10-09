@@ -160,7 +160,7 @@ export async function updateEventDetails(patch, eventId) {
   const eid = eventId || reqEid();
   await updateDoc(doc(db, "events", eid), patch);
   await writeEventPublic(eid, {
-    name: patch.name || "", place: patch.place || "", dates: patch.dates || "",
+    name: patch.name || "", place: patch.place || "", address: patch.address || "", dates: patch.dates || "",
     startsAt: patch.startDate || "", endsAt: patch.endDate || "",
   });
 }
@@ -301,6 +301,21 @@ export async function setTeamLogo(teamName, dataUrl) {
   await setDoc(teamLogosRef(eid), { eventId: eid, logos: { [teamName]: dataUrl || deleteField() } }, { merge: true });
 }
 
+/* ----------------- team kits (uniforms) ----------------- */
+// One public doc per event: { eventId, kits: { [teamName]: [{shirt, shorts}, {shirt, shorts}] } }
+// — up to two uniforms per team. Games pick one by number (see saveGameKit);
+// public so Fistball Live can show which uniform each team wears.
+const teamKitsRef = (eid) => doc(db, "public", `teamkits_${eid}`);
+export function subscribeTeamKits(cb) {
+  return onSnapshot(teamKitsRef(reqEid()),
+    (d) => cb(d.exists() ? d.data().kits || {} : {}),
+    (err) => { console.warn("team kits unavailable:", err?.code || err); cb({}); });
+}
+export async function setTeamKits(teamName, kits) {
+  const eid = reqEid();
+  await setDoc(teamKitsRef(eid), { eventId: eid, kits: { [teamName]: kits } }, { merge: true });
+}
+
 /* ----------------- logo library + event branding ----------------- */
 // Reusable logo library (global). Each logo is { name, dataUrl } (small PNG).
 export function subscribeLogos(cb) {
@@ -353,7 +368,7 @@ export async function setLiveEvent(event) {
   });
   // Ensure the public info doc exists so the Live has place/dates/countdown.
   await writeEventPublic(eid, {
-    name: event?.name || "", place: event?.place || "", dates: event?.dates || "",
+    name: event?.name || "", place: event?.place || "", address: event?.address || "", dates: event?.dates || "",
     startsAt: event?.startDate || "", endsAt: event?.endDate || "",
   });
 }
@@ -662,11 +677,12 @@ export async function saveGameRefs(gameId, refs) {
   await setDoc(edoc("games", gameId), { refs }, { merge: true });
 }
 
-// Shirt/kit colour a team wears in a game (referees decide per day, sometimes
-// per game). side is "A" or "B"; color is a hex string ("" clears it). Mirrored
-// onto the public result so the spectator app can show it too.
-export async function saveGameKit(gameId, side, color) {
-  const patch = { kit: { [side]: color || "" } };
+// Uniform a team wears in a game (referees decide per day, sometimes per game).
+// side is "A" or "B"; kit is the team's uniform number (1 or 2, see team kits),
+// or "" to clear. Older events stored a shirt hex string here. Mirrored onto
+// the public result so the spectator app can show it too.
+export async function saveGameKit(gameId, side, kit) {
+  const patch = { kit: { [side]: kit || "" } };
   await setDoc(edoc("games", gameId), patch, { merge: true });
   try { await setDoc(edoc("results", gameId), patch, { merge: true }); } catch (_) { /* result may not exist */ }
 }
@@ -765,7 +781,7 @@ function blankReport(game) {
     // Pre-fill from the referees assigned to the game in the schedule, if any.
     referees: { r1: "", r2: "", clerk: "", a1: "", a2: "", ...(game.refs || {}) },
     remarks: "", responsible: "",
-    signatures: { capA: false, capB: false, referee: false },
+    signatures: { capA: false, capB: false, referee: false, clerk: false },
     status: "not_started",
     lockedBy: null,
   };

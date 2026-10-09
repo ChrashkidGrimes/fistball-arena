@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { subscribeGames, saveGameKit } from "../cloud.js";
+import { subscribeGames, saveGameKit, subscribeTeamKits, setTeamKits } from "../cloud.js";
+import { resolveKit } from "../kits.js";
+import { KitSwatch } from "../KitSwatch.jsx";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
 
@@ -16,7 +18,7 @@ const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); r
 const dayLabel = (s) => { const dt = parseDate(s); return `${dt.toLocaleDateString("en-US", { weekday: "short" })} ${dt.getDate()} ${dt.toLocaleDateString("en-US", { month: "short" })}`; };
 const shortTeam = (t) => String(t?.name || t || "").split(" - ")[0];
 
-function ColorPick({ value, disabled, onPick }) {
+function ColorPick({ value, disabled, onPick, what = "shirt" }) {
   const [pos, setPos] = useState(null); // {top,left} while open (fixed, via portal)
   const btnRef = useRef(null);
   const toggle = () => {
@@ -28,7 +30,7 @@ function ColorPick({ value, disabled, onPick }) {
   return (
     <span className="cpick">
       <button ref={btnRef} type="button" className="cpick-btn" disabled={disabled} onClick={toggle}
-        title={value ? "Change shirt colour" : "Set shirt colour"} style={value ? { background: value } : undefined}>
+        title={value ? `Change ${what} colour` : `Set ${what} colour`} style={value ? { background: value } : undefined}>
         {!value && <span className="cpick-empty">—</span>}
       </button>
       {pos && !disabled && createPortal(
@@ -46,21 +48,29 @@ function ColorPick({ value, disabled, onPick }) {
   );
 }
 
-// Referees define the shirt colour each team wears. Set a whole day for a team
-// at once, or override a single game. Admin only.
+// Each team registers up to two uniforms (shirt + shorts colours). Referees
+// then decide which one a team wears: for a whole day at once, or overriding a
+// single game. Admin only. Shown on the games list and on Fistball Live.
 export default function Colors() {
   const nav = useNavigate();
-  const { eventId, isAdmin, archived } = useEvent();
+  const { eventId, event, isAdmin, archived } = useEvent();
   const [games, setGames] = useState([]);
+  const [teamKits, setTeamKitsState] = useState({});
   const [day, setDay] = useState("all");
   const [q, setQ] = useState("");
-  const [bulk, setBulk] = useState({ team: "", date: "", color: "" });
+  const [bulk, setBulk] = useState({ team: "", date: "", kit: "" });
   const [status, setStatus] = useState("");
 
   useEffect(() => subscribeGames(setGames), []);
+  useEffect(() => subscribeTeamKits(setTeamKitsState), []);
 
   const days = useMemo(() => [...new Set(games.map((g) => g.date).filter(Boolean))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
-  const teamNames = useMemo(() => [...new Set(games.flatMap((g) => [g.teamA?.name, g.teamB?.name]).filter(Boolean))].sort(), [games]);
+  // Registered teams (Settings → Teams); falls back to the names on the games.
+  const teamNames = useMemo(() => {
+    const entries = (event?.entries || []).map((t) => t.name).filter(Boolean);
+    const list = entries.length ? entries : games.flatMap((g) => [g.teamA?.name, g.teamB?.name]).filter(Boolean);
+    return [...new Set(list)].sort();
+  }, [event, games]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     return games
@@ -71,40 +81,90 @@ export default function Colors() {
 
   if (!isAdmin) return <div className="empty">Admins only.</div>;
 
-  const setKit = async (g, side, color) => {
-    try { await saveGameKit(g.id, side, color); }
-    catch (e) { setStatus("Failed: " + (e?.code || e?.message || e)); }
+  const fail = (e) => setStatus("Failed: " + (e?.code || e?.message || e));
+  const setTeamColor = (team, n, part, color) => {
+    const kits = [0, 1].map((i) => ({ shirt: "", shorts: "", ...(teamKits[team]?.[i] || {}) }));
+    kits[n - 1][part] = color;
+    setTeamKits(team, kits).catch(fail);
   };
+  const setKit = (g, side, kit) => saveGameKit(g.id, side, kit).catch(fail);
   const applyBulk = async () => {
-    const { team, date, color } = bulk;
+    const { team, date, kit } = bulk;
     if (!team || !date) { setStatus("Pick a team and a day first."); return; }
-    const targets = games.filter((g) => g.date === date && (g.teamA?.name === team || g.teamB?.name === team));
+    const targets = games.filter((g) => (date === "all" || g.date === date) && (g.teamA?.name === team || g.teamB?.name === team));
     if (!targets.length) { setStatus("No games for that team on that day."); return; }
     setStatus("Applying…");
     try {
-      for (const g of targets) await saveGameKit(g.id, g.teamA?.name === team ? "A" : "B", color);
-      setStatus(`Set ${shortTeam({ name: team })}'s shirt on ${dayLabel(date)} for ${targets.length} game(s).`);
-    } catch (e) { setStatus("Failed: " + (e?.code || e?.message || e)); }
+      for (const g of targets) await saveGameKit(g.id, g.teamA?.name === team ? "A" : "B", kit ? Number(kit) : "");
+      const when = date === "all" ? "every day" : dayLabel(date);
+      setStatus(`${kit ? `Uniform ${kit}` : "No uniform"} for ${shortTeam({ name: team })} on ${when} — ${targets.length} game(s).`);
+    } catch (e) { fail(e); }
+  };
+
+  const kitSelect = (g, side) => {
+    const team = side === "A" ? g.teamA?.name : g.teamB?.name;
+    const v = g.kit?.[side];
+    return (
+      <>
+        <KitSwatch kit={resolveKit(v, teamKits[team])} size={16} />
+        <select className="kit-sel" value={typeof v === "number" ? String(v) : v ? "legacy" : ""} disabled={archived}
+          onChange={(e) => setKit(g, side, e.target.value ? Number(e.target.value) : "")} aria-label={`Uniform for ${shortTeam({ name: team })}`}>
+          <option value="">—</option>
+          <option value="1">Uniform 1</option>
+          <option value="2">Uniform 2</option>
+          {typeof v === "string" && v && <option value="legacy" disabled>Shirt only (old)</option>}
+        </select>
+      </>
+    );
   };
 
   return (
     <>
-      <h2 className="page-h">Shirt colors</h2>
-      <p className="muted-sm" style={{ marginTop: -8 }}>Referees set which shirt each team wears. Set a team's colour for a whole day at once, or click a game's swatch to override just that match. Shows on the games list and game report.</p>
+      <h2 className="page-h">Uniforms</h2>
+      <p className="muted-sm" style={{ marginTop: -8 }}>Register each team's uniforms (up to two: shirt and shorts colours), then set which one a team wears — for a whole day at once, or per game to override a specific round. Shows on the games list and in the Uniforms tab of Fistball Live.</p>
       {archived && <div className="warn-box">This event is archived — read-only.</div>}
+
+      <div className="card" style={{ maxWidth: "none" }}>
+        <h2>Team uniforms</h2>
+        <div className="grid-scroll">
+          <table className="ref-grid kit-teams">
+            <thead><tr><th className="rg-game">Team</th><th>Uniform 1 (shirt · shorts)</th><th>Uniform 2 (shirt · shorts)</th></tr></thead>
+            <tbody>
+              {teamNames.length === 0 && <tr><td className="muted-sm" colSpan={3}>No teams yet — add them in Settings → Teams.</td></tr>}
+              {teamNames.map((team) => (
+                <tr key={team}>
+                  <td className="clr-cell"><span className="flag">{flagFor(team)}</span>{shortTeam({ name: team })}</td>
+                  {[1, 2].map((n) => (
+                    <td key={n} className="clr-cell">
+                      <ColorPick what="shirt" value={teamKits[team]?.[n - 1]?.shirt || ""} disabled={archived} onPick={(c) => setTeamColor(team, n, "shirt", c)} />
+                      <ColorPick what="shorts" value={teamKits[team]?.[n - 1]?.shorts || ""} disabled={archived} onPick={(c) => setTeamColor(team, n, "shorts", c)} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {!archived && (
         <div className="card" style={{ maxWidth: "none" }}>
           <div className="bulk-row">
-            <span className="muted-sm">Set a team's shirt for a whole day:</span>
+            <span className="muted-sm">Uniform of the day:</span>
             <input list="clr-teams" className="game-search" style={{ maxWidth: 240 }} value={bulk.team} onChange={(e) => setBulk({ ...bulk, team: e.target.value })} placeholder="Team…" />
             <datalist id="clr-teams">{teamNames.map((n) => <option key={n} value={n} />)}</datalist>
             <select className="ag-role" value={bulk.date} onChange={(e) => setBulk({ ...bulk, date: e.target.value })}>
               <option value="">— day —</option>
+              <option value="all">Every day</option>
               {days.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
             </select>
-            <ColorPick value={bulk.color} onPick={(c) => setBulk({ ...bulk, color: c })} />
-            <button className="btn sm" onClick={applyBulk}>Apply to day</button>
+            <select className="ag-role" value={bulk.kit} onChange={(e) => setBulk({ ...bulk, kit: e.target.value })}>
+              <option value="">— none —</option>
+              <option value="1">Uniform 1</option>
+              <option value="2">Uniform 2</option>
+            </select>
+            <KitSwatch kit={resolveKit(Number(bulk.kit), teamKits[bulk.team])} size={18} />
+            <button className="btn sm" onClick={applyBulk}>Apply</button>
           </div>
         </div>
       )}
@@ -119,7 +179,7 @@ export default function Colors() {
 
       <div className="grid-scroll">
         <table className="ref-grid">
-          <thead><tr><th className="rg-game">Game</th><th>Team A shirt</th><th>Team B shirt</th></tr></thead>
+          <thead><tr><th className="rg-game">Game</th><th>Team A uniform</th><th>Team B uniform</th></tr></thead>
           <tbody>
             {shown.length === 0 && <tr><td className="muted-sm" colSpan={3}>No games.</td></tr>}
             {shown.map((g) => (
@@ -128,8 +188,8 @@ export default function Colors() {
                   <div className="rg-nr">#{g.nr} <span className="muted-sm">{dayLabel(g.date)} · {g.time} · Court {g.court}</span></div>
                   <div className="muted-sm">{g.category} · {g.round}</div>
                 </td>
-                <td className="clr-cell"><span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} <ColorPick value={g.kit?.A || ""} disabled={archived} onPick={(c) => setKit(g, "A", c)} /></td>
-                <td className="clr-cell"><span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)} <ColorPick value={g.kit?.B || ""} disabled={archived} onPick={(c) => setKit(g, "B", c)} /></td>
+                <td className="clr-cell"><span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} {kitSelect(g, "A")}</td>
+                <td className="clr-cell"><span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)} {kitSelect(g, "B")}</td>
               </tr>
             ))}
           </tbody>

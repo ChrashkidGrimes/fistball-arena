@@ -943,3 +943,9 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .mx-logo-x { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; border: 0; padding: 0; font-size: 9px; line-height: 16px; background: #c0392b; color: #fff; cursor: pointer; }
 .mx-logo-add { flex: none; font-size: 10px; font-weight: 700; padding: 3px 5px; border-radius: 6px; border: 1px dashed var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .mx-logo-add:hover { border-color: var(--brand-2); color: var(--brand-2); }
+.kit-sw { display: inline-flex; flex-direction: column; border-radius: 3px; overflow: hidden; border: 1px solid rgba(0,0,0,.3); vertical-align: middle; margin-right: 4px; }
+.kit-sw > span { display: block; }
+.kit-sw > span + span { border-top: 1px solid rgba(0,0,0,.25); }
+.kit-teams td { vertical-align: middle; }
+.kit-teams .kit-n { font-weight: 700; color: var(--muted); font-size: 12px; margin-right: 2px; }
+.kit-sel { min-height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; background: #fff; font-size: 13px; margin-left: 6px; }

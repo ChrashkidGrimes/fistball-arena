@@ -262,7 +262,8 @@ export default function SumulaPDF({ draft, branding }) {
           <View style={s.sigRow}>
             {[[`Captain — ${short(d.teamA.name)}`, d.signatures.capA],
               [`Captain — ${short(d.teamB.name)}`, d.signatures.capB],
-              ["Referee", d.signatures.referee]].map(([k, on]) => (
+              ["Referee", d.signatures.referee],
+              ["Recording Clerk", d.signatures.clerk]].map(([k, on]) => (
               <View style={s.sigBox} key={k}>
                 <Text style={s.small}>{on ? "signed" : ""}</Text>
                 <Text style={[s.label, { textAlign: "center" }]}>{k}</Text>

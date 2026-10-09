@@ -77,7 +77,7 @@ function initDraft(m) {
     referees: { r1: "", r2: "", clerk: "", a1: "", a2: "" },
     remarks: "",
     responsible: "",
-    signatures: { capA: false, capB: false, referee: false },
+    signatures: { capA: false, capB: false, referee: false, clerk: false },
   };
 }
 

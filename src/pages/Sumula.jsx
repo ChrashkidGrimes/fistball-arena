@@ -586,6 +586,7 @@ function FinishSection({ d, scoring, update, onPdf }) {
           ["capA", `Captain — ${short(d.teamA.name)}`],
           ["capB", `Captain — ${short(d.teamB.name)}`],
           ["referee", "Referee"],
+          ["clerk", `Recording Clerk${d.referees?.clerk ? ` — ${d.referees.clerk}` : ""}`],
         ].map(([k, label]) => (
           <div className="toggle-row" key={k}>
             <span>{label}</span>
@@ -625,7 +626,7 @@ function extractDraft(data) {
     referees: data.referees || { r1: "", r2: "", clerk: "", a1: "", a2: "" },
     remarks: data.remarks || "",
     responsible: data.responsible || "",
-    signatures: data.signatures || { capA: false, capB: false, referee: false },
+    signatures: { capA: false, capB: false, referee: false, clerk: false, ...(data.signatures || {}) },
     submittedAt: data.submittedAt || null,
     amendments: data.amendments || [],
   };

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pdf } from "@react-pdf/renderer";
-import { subscribeGames, subscribeReports, adminUnlock, runAdvancementAll } from "../cloud.js";
+import { subscribeGames, subscribeReports, subscribeTeamKits, adminUnlock, runAdvancementAll } from "../cloud.js";
+import { resolveKit } from "../kits.js";
+import { KitSwatch } from "../KitSwatch.jsx";
 import { flagFor } from "../flags.js";
 import { useEvent } from "../eventContext.js";
 import SchedulePDF from "../pdf/SchedulePDF.jsx";
@@ -26,6 +28,8 @@ export default function MatchList({ me }) {
   const [court, setCourt] = useState(() => localStorage.getItem("fb_court") || "all");
   const [day, setDay] = useState(() => localStorage.getItem("fb_day") || "all");
   const [q, setQ] = useState("");
+  const [teamKits, setTeamKits] = useState({});
+  useEffect(() => subscribeTeamKits(setTeamKits), [eventId]);
 
   // Short names come from the game (if published with one) or the event's team
   // entries (so setting a short name reflects even on already-published games).
@@ -137,10 +141,10 @@ export default function MatchList({ me }) {
               )}
             </div>
             <div className="mc-teams">
-              {m.kit?.A && <span className="kit-dot" style={{ background: m.kit.A }} title="Shirt colour" />}
+              <KitSwatch kit={resolveKit(m.kit?.A, teamKits[m.teamA.name])} />
               <span className="flag">{flagFor(m.teamA.name)}</span>{teamLabel(m.teamA)}
               <span className="vs">vs</span>
-              {m.kit?.B && <span className="kit-dot" style={{ background: m.kit.B }} title="Shirt colour" />}
+              <KitSwatch kit={resolveKit(m.kit?.B, teamKits[m.teamB.name])} />
               <span className="flag">{flagFor(m.teamB.name)}</span>{teamLabel(m.teamB)}
             </div>
           </div>

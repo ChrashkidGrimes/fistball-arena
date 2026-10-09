@@ -34,7 +34,7 @@ function fmtStamp(iso) {
 }
 
 const fromEvent = (ev) => ({
-  name: ev?.name || "", place: ev?.place || "", startDate: ev?.startDate || "", endDate: ev?.endDate || "",
+  name: ev?.name || "", place: ev?.place || "", address: ev?.address || "", startDate: ev?.startDate || "", endDate: ev?.endDate || "",
   categoryBuilder: ev?.categoryBuilder || { types: [], sexes: [], ages: [] },
   entries: ev?.entries || [], // [{ name, cats: [categoryName…] }]
   formatOverrides: ev?.formatOverrides || {}, // { [category]: { [matchId]: { a?, b? } } }
@@ -191,7 +191,7 @@ export default function Settings({ me }) {
 
   const saveDetails = async () => {
     setStatus("Saving event…");
-    try { await updateEventDetails({ name: details.name, place: details.place, startDate: details.startDate, endDate: details.endDate, dates: formatRange(details.startDate, details.endDate) }); afterSave("Event details saved."); setOpenStep(2); }
+    try { await updateEventDetails({ name: details.name, place: details.place, address: details.address.trim(), startDate: details.startDate, endDate: details.endDate, dates: formatRange(details.startDate, details.endDate) }); afterSave("Event details saved."); setOpenStep(2); }
     catch (e) { setStatus("Save failed: " + (e?.message || e)); }
   };
 
@@ -368,6 +368,8 @@ export default function Settings({ me }) {
             <input value={details.name} disabled={archived} onChange={(e) => edit((d) => ({ ...d, name: e.target.value }))} /></div>
           <div className="field"><span>Place</span>
             <input value={details.place} disabled={archived} onChange={(e) => edit((d) => ({ ...d, place: e.target.value }))} placeholder="City · Country" /></div>
+          <div className="field"><span>Venue address</span>
+            <input value={details.address} disabled={archived} onChange={(e) => edit((d) => ({ ...d, address: e.target.value }))} placeholder="Street, number, city — shown on Fistball Live with directions" /></div>
           <div className="grid2">
             <div className="field"><span>Starts</span>
               <input type="date" disabled={archived} value={details.startDate} onChange={(e) => edit((d) => ({ ...d, startDate: e.target.value, endDate: d.endDate && d.endDate < e.target.value ? e.target.value : d.endDate }))} /></div>
