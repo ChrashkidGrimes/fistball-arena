@@ -233,8 +233,8 @@ of kit changes**.
 
 - **Clash**: two kits clash if their shirt colours are too similar. Compute
   colour distance as ΔE (CIE76 in Lab) between shirt hex values; clash if
-  `ΔE < threshold` (default 25, configurable). Shorts are a soft tie-breaker
-  only (similar shorts = small penalty, never a clash).
+  `ΔE < threshold` (default 35, configurable per event). Only shirts count —
+  shorts are ignored entirely.
 - **Kit change**: for a team, a change between two consecutive games of that
   team on the same day where the kit differs. (Switching for one game and back
   counts as 2 changes.)
@@ -253,7 +253,6 @@ of kit changes**.
    day (ties: the kit of its last game). Days without games for the team are
    skipped, so the alternation continues from its last playing day.
 5. Prefer Uniform 1 (effectively decides the team's first day).
-6. Minimise similar-shorts penalties.
 
 ### 4.4 Algorithm
 
@@ -264,7 +263,7 @@ of kit changes**.
 - **Step 1 – one kit per day**: try to assign a day kit to every team in the
   component so that no game clashes (variables are only teams with 2 kits;
   components are small, so exhaustive search over 2^k is fine for k ≤ ~16, with
-  pruning). If feasible, pick the best one by objectives 4–6. Done.
+  pruning). If feasible, pick the best one by objectives 4–5. Done.
 - **Step 2 – minimal changes**: dynamic programming over the component's time
   slots in chronological order. State = the current kit of every team in the
   component (2^k). Transition to the next slot: every game in that slot must be
@@ -276,8 +275,7 @@ of kit changes**.
 
 ### 4.5 UI (Uniforms page)
 
-- Clash badge per game row (red = clash, grey = unresolvable, orange = similar
-  shorts).
+- Clash badge per game row (red = clash, grey = unresolvable).
 - Button "Suggest uniforms" (per day or all days) → diff modal showing per team
   the day kit and any per-game deviations, total changes → "Apply" writes via
   `saveGameKit`.
