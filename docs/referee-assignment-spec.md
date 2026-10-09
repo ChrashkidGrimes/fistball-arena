@@ -113,9 +113,9 @@ import can follow later.
 
 1. **Country conflict**: official's `country` equals either team's country.
    Hard for `r1` in every game and for `r2` in group-stage games. For `r2` in
-   knockout games see the exception in 3.2. Always hard for `a1` and `a2`.
-   Does **not** apply to `clerk`: the scorer's nation plays no role in the
-   assignment.
+   knockout games see the exception in 3.2. Does **not** apply to `clerk` or
+   to line judges (`a1`, `a2`): their nation plays no role in the assignment —
+   except for a referee filling a line judge slot (see 3.2).
 2. **Club conflict**: official's `club` equals either team's club
    (e.g. Ahlhorner SV members cannot officiate Ahlhorner SV games).
 3. **Unavailable**: availability status `unavailable` for that date, or the
@@ -141,6 +141,10 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
   Highest soft penalty, always shown as an orange warning, never a silent
   fallback. `r1` must always be neutral. Knockout = any game outside the group
   stage (`phase !== "group"`, or a round other than "Qualification round").
+- **Referee as line judge from a playing nation**: a person with the `SR`
+  role in `a1`/`a2` whose `country` equals either team's country → orange
+  warning and penalty. A referee as line judge from a neutral nation is fine;
+  pure line judges (no `SR` role) never get a nation warning.
 - **Reserve usage**: status `reserve` for that date → high penalty.
 - **Break violation**: same person in back-to-back slots without a break
   (configurable minimum gap, default: at least one free slot after N games).
@@ -173,12 +177,13 @@ score(assignment) = Σ hard violations × ∞  (excluded)
                   + w_break     · break violations
                   + w_load      · load imbalance
                   + w_soloLR    · solo LR uses
+                  + w_srLRNation · referees as LR from a playing nation
                   + w_repeat    · repeats
                   − w_gender    · female SR on women's games
 ```
 
 Weights live in one config object (event-level, editable later), default
-ordering: `w_r2Nation ≫ w_reserve ≫ w_break > w_soloLR > w_load > w_gender > w_repeat`.
+ordering: `w_r2Nation ≫ w_reserve ≫ w_break > w_srLRNation > w_soloLR > w_load > w_gender > w_repeat`.
 
 ### 3.6 Solver
 
