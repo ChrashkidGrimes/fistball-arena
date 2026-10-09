@@ -171,3 +171,12 @@ test("suggestRefShirts: locked colours stay unless overwrite; unresolvable repor
   assert.equal(refOf(suggestRefShirts([g3], tk, REF), g3), "y");
   assert.notEqual(refOf(suggestRefShirts([g3], tk, REF, { overwrite: true }), g3), "y");
 });
+
+test("suggestRefShirts: no colour preference — list order doesn't matter, ties are balanced", () => {
+  // No team shirts set → every colour fits equally well.
+  const gs = [game("P", "Q", D1, "09:00"), game("P", "Q", D2, "09:00")];
+  const a = suggestRefShirts(gs, {}, REF), b = suggestRefShirts(gs, {}, [...REF].reverse());
+  assert.deepEqual(a.games.map((g) => g.kit.R), b.games.map((g) => g.kit.R));
+  // Two days, equal contrast → two different colours rather than the same one twice.
+  assert.notEqual(a.games[0].kit.R, a.games[1].kit.R);
+});

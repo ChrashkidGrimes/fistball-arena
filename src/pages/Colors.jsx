@@ -258,18 +258,17 @@ export default function Colors() {
   );
 }
 
-// The event's referee shirt colours, in preference order. All officials of a
+// The event's referee shirt colours (no preference between them). All officials of a
 // game wear one of them; "Suggest uniforms" picks one per game that contrasts
 // with both teams.
 function RefShirtsCard({ refKits, archived, onSave }) {
   const [names, setNames] = useState({}); // id -> name being typed
   const update = (i, patch) => onSave(refKits.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const move = (i, d) => { const l = [...refKits]; [l[i], l[i + d]] = [l[i + d], l[i]]; onSave(l); };
   const add = () => onSave([...refKits, { id: Date.now().toString(36), name: "", shirt: "" }]);
   return (
     <div className="card" style={{ maxWidth: "none" }}>
       <h2>Referee shirts</h2>
-      <p className="muted-sm" style={{ marginTop: -6 }}>Shirt colours the officials have at this event, most preferred first. All officials of a game wear the same colour; "Suggest uniforms" picks one that contrasts with both teams.</p>
+      <p className="muted-sm" style={{ marginTop: -6 }}>Shirt colours the officials have at this event. All officials of a game wear the same colour; "Suggest uniforms" picks one that contrasts with both teams.</p>
       {refKits.length > 0 && (
         <div className="rs-list">
           {refKits.map((r, i) => (
@@ -279,13 +278,7 @@ function RefShirtsCard({ refKits, archived, onSave }) {
                 onChange={(e) => setNames((p) => ({ ...p, [r.id]: e.target.value }))}
                 onBlur={() => { if (names[r.id] !== undefined && names[r.id] !== r.name) update(i, { name: names[r.id].trim() }); setNames((p) => { const n = { ...p }; delete n[r.id]; return n; }); }}
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} aria-label="Colour name" />
-              {!archived && (
-                <>
-                  <button className="btn sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up" title="Prefer this colour">↑</button>
-                  <button className="btn sm" onClick={() => move(i, 1)} disabled={i === refKits.length - 1} aria-label="Move down">↓</button>
-                  <button className="btn danger sm" onClick={() => onSave(refKits.filter((_, j) => j !== i))} aria-label="Remove">✕</button>
-                </>
-              )}
+              {!archived && <button className="btn danger sm" onClick={() => onSave(refKits.filter((_, j) => j !== i))} aria-label="Remove">✕</button>}
             </div>
           ))}
         </div>

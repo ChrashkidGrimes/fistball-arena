@@ -290,8 +290,8 @@ export function suggestKits(games, teamKits, opts = {}) {
 }
 
 /* ---------- referee shirts (spec §4.6) ---------- */
-// refKits: the event's officials' shirt colours [{ id, name, shirt }], in
-// preference order. All officials of a game wear one colour: game.kit.R = id.
+// refKits: the event's officials' shirt colours [{ id, name, shirt }] — no
+// preference between them. All officials of a game wear one colour: game.kit.R = id.
 
 // Team shirts actually worn in a game (null when not set).
 const teamShirts = (g, teamKits) => [shirtOf(g.kit?.A, teamKits[name(g.teamA)]), shirtOf(g.kit?.B, teamKits[name(g.teamB)])].filter(Boolean);
@@ -323,7 +323,8 @@ export function checkRefShirts(games, teamKits, refKits, opts = {}) {
 //   1. one colour for the whole day if one contrasts with every game;
 //   2. otherwise game by game in time order: fewest officials changing colour
 //      (each official's previous game that day; without officials: the court's
-//      previous game) › best contrast › earlier in the list.
+//      previous game) › best contrast.
+// Exact ties go to the colour used least so far (no colour is preferred).
 // Locked game.kit.R stays unless opts.overwrite.
 // → { proposals: [{ gameId, side: "R", from, to }], games, unresolvable: [gameId] }
 export function suggestRefShirts(games, teamKits, refKits, opts = {}) {
@@ -335,6 +336,8 @@ export function suggestRefShirts(games, teamKits, refKits, opts = {}) {
   if (!list.length) return { proposals: [], games: work, unresolvable };
   const locked = (g) => !opts.overwrite && !!g.kit.R && list.some((r) => r.id === g.kit.R);
   const ok = (r, g) => contrast(r, g, teamKits) >= th;
+  const used = new Map(); // colour id → games so far (neutral tie-break)
+  const fewerUsed = (a, b) => (used.get(a.r.id) || 0) - (used.get(b.r.id) || 0) || String(a.r.id).localeCompare(String(b.r.id));
   const officials = (g) => ["r1", "r2", "clerk", "a1", "a2"].map((s) => String(g.refs?.[s] ?? "").trim().toLowerCase()).filter(Boolean);
 
   for (const date of [...new Set(work.map((g) => g.date))]) {
@@ -348,9 +351,13 @@ export function suggestRefShirts(games, teamKits, refKits, opts = {}) {
     const fixed = day.filter((g) => !todo.includes(g) && g.kit.R).map((g) => g.kit.R);
     const allDay = list
       .filter((r) => solvable.every((g) => ok(r, g)) && fixed.every((id) => id === r.id))
-      .map((r, i) => ({ r, i, c: Math.min(...solvable.map((g) => contrast(r, g, teamKits))) }))
-      .sort((a, b) => b.c - a.c || a.i - b.i)[0];
-    if (allDay) { for (const g of solvable) g.kit.R = allDay.r.id; continue; }
+      .map((r) => ({ r, c: Math.min(...solvable.map((g) => contrast(r, g, teamKits))) }))
+      .sort((a, b) => b.c - a.c || fewerUsed(a, b))[0];
+    if (allDay) {
+      for (const g of solvable) g.kit.R = allDay.r.id;
+      used.set(allDay.r.id, (used.get(allDay.r.id) || 0) + solvable.length);
+      continue;
+    }
 
     // 2. Game by game.
     const lastOf = new Map(); // official or "court:N" → colour id
@@ -359,10 +366,11 @@ export function suggestRefShirts(games, teamKits, refKits, opts = {}) {
       const keys = who.length ? who : ["court:" + g.court];
       if (solvable.includes(g)) {
         const best = list
-          .map((r, i) => ({ r, i, c: contrast(r, g, teamKits), ch: keys.filter((k) => lastOf.has(k) && lastOf.get(k) !== r.id).length }))
+          .map((r) => ({ r, c: contrast(r, g, teamKits), ch: keys.filter((k) => lastOf.has(k) && lastOf.get(k) !== r.id).length }))
           .filter((x) => x.c >= th)
-          .sort((a, b) => a.ch - b.ch || b.c - a.c || a.i - b.i)[0];
+          .sort((a, b) => a.ch - b.ch || b.c - a.c || fewerUsed(a, b))[0];
         g.kit.R = best.r.id;
+        used.set(best.r.id, (used.get(best.r.id) || 0) + 1);
       }
       if (g.kit.R) for (const k of keys) lastOf.set(k, g.kit.R);
     }

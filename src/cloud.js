@@ -315,7 +315,7 @@ export async function setTeamKits(teamName, kits) {
   const eid = reqEid();
   await setDoc(teamKitsRef(eid), { eventId: eid, kits: { [teamName]: kits } }, { merge: true });
 }
-// Referee shirt colours of the event, in preference order: [{ id, name, shirt }].
+// Referee shirt colours of the event (no preference between them): [{ id, name, shirt }].
 // Same public doc; a game's officials wear one of them (game.kit.R = id, via saveGameKit).
 export function subscribeRefKits(cb) {
   return onSnapshot(teamKitsRef(reqEid()),
