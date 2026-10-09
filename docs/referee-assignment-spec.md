@@ -117,11 +117,17 @@ import can follow later.
    to line judges (`a1`, `a2`): their nation plays no role in the assignment —
    except for a referee filling a line judge slot (see 3.2).
 2. **Club conflict**: official's `club` equals either team's club
-   (e.g. Ahlhorner SV members cannot officiate Ahlhorner SV games).
+   (e.g. Ahlhorner SV members cannot referee Ahlhorner SV games). Hard for
+   `r1`/`r2` only. For line judges it is a soft rule (avoid if possible, see
+   3.2); for `clerk` the club plays no role.
 3. **Unavailable**: availability status `unavailable` for that date, or the
    game's start time is not in the person's `slots` whitelist.
 4. **Double booking**: same person in two games whose time windows overlap,
    or twice in the same game.
+8. **Too many games in a row**: more than **two** consecutive rounds
+   (Durchgänge) on the same day without a free round in between. A round is
+   one start time of the day (all courts); consecutive = adjacent start times
+   of that day's schedule.
 5. **Role not allowed**: person lacks the role for that slot (`roles`).
 6. **Women's finals gender rule**: in women's semifinals, bronze and final,
    at least one of `r1`/`r2` must be female.
@@ -146,8 +152,13 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
   warning and penalty. A referee as line judge from a neutral nation is fine;
   pure line judges (no `SR` role) never get a nation warning.
 - **Reserve usage**: status `reserve` for that date → high penalty.
-- **Break violation**: same person in back-to-back slots without a break
-  (configurable minimum gap, default: at least one free slot after N games).
+- **Break violation**: same person in two consecutive rounds. Preferred is a
+  free round after every game; two in a row are allowed but penalised, a
+  third in a row is a hard violation (3.1 rule 8). Both limits configurable
+  (default: soft at 2, hard at 3).
+- **Line judge from a playing club**: `a1`/`a2` whose `club` equals either
+  team's club → orange warning and penalty (avoided whenever another line
+  judge or pair is eligible).
 - **Load imbalance**: deviation from the average number of games per person
   (per role, per day and overall); also `maxPerDay` exceeded.
 - **Repeat pairing / repeat team**: same official seeing the same team many
@@ -176,6 +187,7 @@ score(assignment) = Σ hard violations × ∞  (excluded)
                   + w_reserve   · reserve uses
                   + w_break     · break violations
                   + w_load      · load imbalance
+                  + w_lrClub    · line judges from a playing club
                   + w_soloLR    · solo LR uses
                   + w_srLRNation · referees as LR from a playing nation
                   + w_repeat    · repeats
@@ -183,7 +195,7 @@ score(assignment) = Σ hard violations × ∞  (excluded)
 ```
 
 Weights live in one config object (event-level, editable later), default
-ordering: `w_r2Nation ≫ w_reserve ≫ w_break > w_srLRNation > w_soloLR > w_load > w_gender > w_repeat`.
+ordering: `w_r2Nation ≫ w_reserve ≫ w_break > w_lrClub > w_srLRNation > w_soloLR > w_load > w_gender > w_repeat`.
 
 ### 3.6 Solver
 
@@ -334,4 +346,3 @@ in the "Suggest uniforms" diff modal and applied in the same step.
 ## 6. Open questions
 
 - Availability: maintained in Arena only, or also imported from Excel?
-- Break rule: exact minimum gap (one free slot after how many consecutive games?).
