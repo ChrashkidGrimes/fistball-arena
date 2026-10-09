@@ -887,6 +887,25 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .of-day .of-slots { display: block; margin-top: 3px; }
 .of-day.of-reserve { background: #fdf6e9; }
 .of-day.of-unavailable { background: #fbeaec; }
+.ref-grid .ag-cell { position: relative; }
+.ag-cell.rg-hard { border-color: var(--r); background: #fbeaec; }
+.ag-cell.rg-soft { border-color: #e0a63a; background: #fdf6e9; }
+.ag-cell.rg-missing .ref-input { border-style: dashed; border-color: #d99aa0; }
+.rg-badge { position: absolute; top: 2px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; font-size: 10px; font-weight: 800; line-height: 16px; text-align: center; color: #fff; pointer-events: none; }
+.rg-badge-hard { background: var(--r); }
+.rg-badge-soft { background: #e0a63a; }
+.rg-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; }
+.rg-pill { border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; font-weight: 800; cursor: pointer; background: #fff; }
+.rg-pill-hard { background: #fbeaec; border-color: var(--r); color: var(--r); }
+.rg-pill-soft { background: #fdf6e9; border-color: #e0a63a; color: #a9761c; }
+.rg-pill-missing { color: var(--muted); }
+.rg-pill-ok { background: #e2f5ea; border-color: #9fd8b8; color: #1c8a54; }
+.rg-only { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
+.rg-issues { flex-basis: 100%; list-style: none; margin: 4px 0 0; padding: 0; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.rg-issues li { padding: 6px 10px; border-top: 1px solid var(--line); font-size: 13px; cursor: pointer; }
+.rg-issues li:first-child { border-top: 0; }
+.rg-issues li.rg-issue-hard { border-left: 3px solid var(--r); }
+.rg-issues li.rg-issue-soft { border-left: 3px solid #e0a63a; }
 .ref-input { width: 150px; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; background: #fff; font-size: 13px; }
 .ref-input:focus { outline: 2px solid var(--brand-2); border-color: var(--brand-2); }
 .rg-saved td { background: #e6f5ee; transition: background .3s; }

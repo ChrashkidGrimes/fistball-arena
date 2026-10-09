@@ -4,6 +4,7 @@ import { subscribeGames, subscribeReferees, saveGameRefs } from "../cloud.js";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
 import { teamMeta } from "../officials/model.js";
+import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
 
 const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["a1", "Assistant 1"], ["a2", "Assistant 2"]];
@@ -23,6 +24,8 @@ export default function Referees() {
   const [q, setQ] = useState("");
   const [local, setLocal] = useState({});   // gameId -> {r1,..} optimistic overlay
   const [saved, setSaved] = useState({});    // gameId -> ts (flash "saved")
+  const [issuesOnly, setIssuesOnly] = useState(false);
+  const [showList, setShowList] = useState(false);
   const timers = useRef({});
 
   useEffect(() => subscribeGames(setGames), []);
@@ -31,13 +34,20 @@ export default function Referees() {
   const names = useMemo(() => [...new Set(refs.map(refName).filter(Boolean))].sort(), [refs]);
   const teamNations = useMemo(() => [...new Set((event?.entries || []).map((e) => teamMeta(event.entries, e.name).country).filter(Boolean))].sort(), [event]);
   const days = useMemo(() => [...new Set(games.map((g) => g.date))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
+  // Rule checks over ALL games (games in a row / double booking span the day),
+  // including unsaved edits. See src/officials/rules.js.
+  const check = useMemo(() => {
+    const merged = games.map((g) => (local[g.id] ? { ...g, refs: local[g.id] } : g));
+    return checkAssignments(merged, refs, event?.entries || []);
+  }, [games, local, refs, event]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     return games
       .filter((g) => day === "all" || g.date === day)
+      .filter((g) => !issuesOnly || check.cells[g.id])
       .filter((g) => !t || String(g.nr).includes(t) || (g.teamA?.name || "").toLowerCase().includes(t) || (g.teamB?.name || "").toLowerCase().includes(t))
       .sort((a, b) => parseDate(a.date) - parseDate(b.date) || String(a.time).localeCompare(b.time) || a.nr - b.nr);
-  }, [games, day, q]);
+  }, [games, day, q, issuesOnly, check]);
 
   if (!isAdmin) return <div className="empty">Admins only.</div>;
 
@@ -67,6 +77,9 @@ export default function Referees() {
       </div>
       <input className="game-search" style={{ maxWidth: 360, marginBottom: 10 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search game # or team…" />
 
+      <IssueSummary check={check} games={games} day={day} showList={showList} setShowList={setShowList}
+        issuesOnly={issuesOnly} setIssuesOnly={setIssuesOnly} onPick={(g) => { setDay("all"); setQ(String(g.nr)); }} />
+
       <datalist id="ref-names">{names.map((n) => <option key={n} value={n} />)}</datalist>
 
       <div className="grid-scroll">
@@ -86,17 +99,55 @@ export default function Referees() {
                   <div className="rg-teams"><span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} <span className="muted-sm">v</span> <span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)}</div>
                   <div className="muted-sm">{dayLabel(g.date)} · {g.category}</div>
                 </td>
-                {ROLES.map(([k]) => (
-                  <td key={k} className="ag-cell">
-                    <input className="ref-input" list="ref-names" value={valOf(g, k)} disabled={archived}
-                      onChange={(e) => setVal(g, k, e.target.value)} placeholder="—" />
-                  </td>
-                ))}
+                {ROLES.map(([k]) => {
+                  const iss = check.cells[g.id]?.[k];
+                  const lvl = cellLevel(iss);
+                  const empty = !String(valOf(g, k)).trim();
+                  return (
+                    <td key={k} className={`ag-cell ${lvl ? `rg-${empty ? "missing" : lvl}` : ""}`} title={iss ? iss.map((i) => (i.level === "hard" ? "⛔ " : "⚠ ") + i.msg).join("\n") : undefined}>
+                      <input className="ref-input" list="ref-names" value={valOf(g, k)} disabled={archived}
+                        onChange={(e) => setVal(g, k, e.target.value)} placeholder={empty && lvl ? "required" : "—"} />
+                      {lvl && !empty && <span className={`rg-badge rg-badge-${lvl}`}>{iss.length > 1 ? iss.length : "!"}</span>}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     </>
+  );
+}
+
+// Header summary: hard / soft / empty counts (for the selected day); click to
+// list the issues, or show only games that have any.
+function IssueSummary({ check, games, day, showList, setShowList, issuesOnly, setIssuesOnly, onPick }) {
+  const byId = useMemo(() => new Map(games.map((g) => [g.id, g])), [games]);
+  const items = check.list
+    .filter((i) => day === "all" || byId.get(i.gameId)?.date === day)
+    .sort((a, b) => (a.level === b.level ? 0 : a.level === "hard" ? -1 : 1) || (byId.get(a.gameId)?.nr ?? 0) - (byId.get(b.gameId)?.nr ?? 0));
+  const n = (f) => items.filter(f).length;
+  const hard = n((i) => i.level === "hard" && i.code !== "missing"), soft = n((i) => i.level === "soft"), missing = n((i) => i.code === "missing");
+  return (
+    <div className="rg-summary">
+      <button className={`rg-pill ${hard ? "rg-pill-hard" : "rg-pill-ok"}`} onClick={() => setShowList(!showList)}>{hard ? `${hard} conflict${hard === 1 ? "" : "s"}` : "No conflicts"}</button>
+      {soft > 0 && <button className="rg-pill rg-pill-soft" onClick={() => setShowList(!showList)}>{soft} warning{soft === 1 ? "" : "s"}</button>}
+      {missing > 0 && <button className="rg-pill rg-pill-missing" onClick={() => setShowList(!showList)}>{missing} empty required slot{missing === 1 ? "" : "s"}</button>}
+      <label className="rg-only"><input type="checkbox" checked={issuesOnly} onChange={(e) => setIssuesOnly(e.target.checked)} /> Only games with issues</label>
+      {showList && items.length > 0 && (
+        <ul className="rg-issues">
+          {items.filter((i) => i.code !== "missing").map((i, j) => {
+            const g = byId.get(i.gameId);
+            return (
+              <li key={j} className={`rg-issue-${i.level}`} onClick={() => g && onPick(g)} title="Show this game">
+                <b>#{g?.nr}</b> <span className="muted-sm">{g?.time}</span> · {SLOT_LABEL[i.slot]}: <b>{i.name}</b> — {i.msg}
+              </li>
+            );
+          })}
+          {missing > 0 && <li className="muted-sm">+ {missing} empty required slot{missing === 1 ? "" : "s"} (Referee 1/2 always; Clerk and Assistants when officials with that role exist).</li>}
+        </ul>
+      )}
+    </div>
   );
 }
