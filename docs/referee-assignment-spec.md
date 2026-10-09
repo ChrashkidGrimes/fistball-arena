@@ -113,8 +113,9 @@ import can follow later.
 
 1. **Country conflict**: official's `country` equals either team's country.
    Hard for `r1` in every game and for `r2` in group-stage games. For `r2` in
-   knockout games see the exception in 3.2. `a1`, `a2` and `clerk` are always
-   hard.
+   knockout games see the exception in 3.2. Always hard for `a1` and `a2`.
+   Does **not** apply to `clerk`: the scorer's nation plays no role in the
+   assignment.
 2. **Club conflict**: official's `club` equals either team's club
    (e.g. Ahlhorner SV members cannot officiate Ahlhorner SV games).
 3. **Unavailable**: availability status `unavailable` for that date, or the
