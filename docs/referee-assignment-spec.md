@@ -228,8 +228,10 @@ ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_rankUnd
   slots are scored, an empty Referee 2 is traded for an empty Clerk.
 - Then a local-improvement pass (swap two officials between games of the same
   day) while the total score decreases.
-- Respect locked (manually entered) cells; only fill empty ones unless the admin
-  chooses "overwrite".
+- Respect filled cells; only fill empty ones. Slots filled by auto-assign are
+  flagged (`game.refsAuto`); "overwrite" recomputes only those. Officials set by
+  hand (no flag) are never changed by auto-assign, and can be cleared
+  separately ("Clear auto-assigned" keeps them).
 - Output: `{ proposals: [{ gameId, role, from, to }], violations: [...] }`.
 
 ### 3.7 UI (Referees page)
