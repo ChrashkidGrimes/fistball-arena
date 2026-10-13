@@ -67,10 +67,29 @@ function squad(teamIdx, women) {
   return { players, staff };
 }
 
+// Officials, twice what one round needs (2 courts → per round 4 referees,
+// 2 scorers, 4 line judges). `roles` / `country` / `gender` / `lrPair` are the
+// officials fields from src/officials/model.js (older app versions ignore them).
+const official = (role, roles) => ([name, first, country, gender, lrPair]) =>
+  ({ name, first, role, roles, country, gender, ...(lrPair ? { lrPair } : {}), photo: "", birthday: "" });
 const REFEREES = [
-  ["Becker", "Thomas"], ["Lehmann", "Sabine"], ["Pereira", "João"], ["Zanetti", "Marco"],
-  ["Hofer", "Martin"], ["Brunner", "Claudia"], ["Vogel", "Stefan"], ["Araya", "Camila"],
-].map(([name, first]) => ({ name, first, role: "Referee", photo: "", birthday: "" }));
+  // Referees (SR)
+  ...[
+    ["Becker", "Thomas", "", "m"], ["Lehmann", "Sabine", "", "f"], ["Pereira", "João", "", "m"], ["Zanetti", "Marco", "", "m"],
+    ["Hofer", "Martin", "", "m"], ["Brunner", "Claudia", "", "f"], ["Vogel", "Stefan", "", "m"], ["Araya", "Camila", "", "f"],
+  ].map(official("Referee", ["SR"])).map(({ country, ...r }) => r), // nation left blank: set it on the Referees page
+  // Scorers / clerks (AS)
+  ...[
+    ["Krämer", "Ute", "Germany", "f"], ["Lindner", "Paul", "Austria", "m"], ["Meier", "Anna", "Switzerland", "f"], ["Souza", "Lucas", "Brazil", "m"],
+  ].map(official("Scorer", ["AS"])),
+  // Line judges (LR), in fixed pairs
+  ...[
+    ["Fuchs", "Jana", "Germany", "f", "LR-1"], ["Wolf", "Erik", "Germany", "m", "LR-1"],
+    ["Gruber", "Lisa", "Austria", "f", "LR-2"], ["Steiner", "Felix", "Austria", "m", "LR-2"],
+    ["Bianchi", "Giulia", "Italy", "f", "LR-3"], ["Ricci", "Luca", "Italy", "m", "LR-3"],
+    ["Rojas", "Diego", "Chile", "m", "LR-4"], ["Muñoz", "Valentina", "Chile", "f", "LR-4"],
+  ].map(official("Line judge", ["LR"])),
+];
 
 // Event days: today and tomorrow, so the event shows up as "current".
 const pad = (n) => String(n).padStart(2, "0");
@@ -231,7 +250,7 @@ async function main() {
   }]);
 
   await commit(docs);
-  console.log(`Seeded ${USERS.length} users, event "${event.name}" (${games.length} games, ${MEN.length + WOMEN.length} rosters, ${REFEREES.length} referees).`);
+  console.log(`Seeded ${USERS.length} users, event "${event.name}" (${games.length} games, ${MEN.length + WOMEN.length} rosters, ${REFEREES.length} officials).`);
   console.log("Sign in with one of: " + USERS.map((u) => u.email).join(", "));
 }
 

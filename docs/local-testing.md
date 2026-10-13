@@ -49,8 +49,10 @@ with the seeded users (or *Add new account* for any other email):
 
 *Demo Cup* runs today and tomorrow (relative to when it was seeded) on two
 courts: *National Teams U18 Men* (6 teams) and *U18 Women* (4 teams), with
-rosters, referees and a schedule built by the same generator as the Settings
-wizard. It is also set as the live event. An archived event fills the timeline.
+rosters, a schedule built by the same generator as the Settings wizard, and
+officials — twice what one round needs: 8 referees (SR, nation left blank to
+set on the Referees page), 4 scorers (AS) and 8 line judges (LR, 4 fixed
+pairs). It is also set as the live event. An archived event fills the timeline.
 
 ## Data & reset
 
