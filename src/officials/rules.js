@@ -100,7 +100,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (!o) continue; // not in the registry → nothing else to check
 
       // 5. Role not allowed (only when roles are set).
-      if (!canFill(o, slot)) add(g.id, slot, "hard", "role", `Not a ${ROLE_LABEL[SLOT_ROLE[slot]].toLowerCase()} (roles: ${o.roles.map((x) => ROLE_LABEL[x] || x).join(", ")})`);
+      if (!canFill(o, slot)) add(g.id, slot, "hard", "role", `Not allowed as ${ROLE_LABEL[SLOT_ROLE[slot]].toLowerCase()} (roles: ${o.roles.map((x) => ROLE_LABEL[x] || x).join(", ")})`);
 
       // 3. Availability.
       const av = availabilityOn(o, g.date);
