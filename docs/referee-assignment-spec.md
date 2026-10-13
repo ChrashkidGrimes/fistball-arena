@@ -16,7 +16,7 @@ Fistball Arena. Read this before touching `src/pages/Referees.jsx`,
   only call them and render results. This keeps the logic testable and reusable.
 - **Tests.** The repo has no test runner yet. Add `node:test` (zero deps) or
   Vitest, plus an `npm test` script and a CI step in `.github/workflows/ci.yml`.
-  Cover every hard rule, LR pairing, the gender rule, and the uniform solver with
+  Cover every hard rule, assistant pairing, the gender rule, and the uniform solver with
   small hand-built fixtures.
 - **Never silently overwrite live data.** Firestore is shared and live. Any
   automatic assignment produces a *proposal* shown as a diff; the admin applies
@@ -45,15 +45,15 @@ Fistball Arena. Read this before touching `src/pages/Referees.jsx`,
 
 ### Role mapping (our terms → Arena)
 
-| Ours | Arena field |
-| --- | --- |
-| SR 1 / SR 2 (Schiedsrichter) | `r1`, `r2` |
-| AS (Anschreiber, scorer) | `clerk` |
-| LR 1 / LR 2 (Linienrichter) | `a1`, `a2` |
+| Ours | Arena role (`roles`) | Arena slots |
+| --- | --- | --- |
+| Referee 1 / 2 (SR, Schiedsrichter) | `referee` | `r1`, `r2` |
+| Clerk (AS, Anschreiber, scorer) | `clerk` | `clerk` |
+| Assistant 1 / 2 (LR, Linienrichter, line judge) | `assistant` | `a1`, `a2` |
 
 This mapping is final. Arena has exactly **one** scorer slot per game
-(`clerk`); no second AS slot is added (the Reiden two-scorer setup does not
-apply). `a1` / `a2` are always the two line judges (LR pair).
+(`clerk`); no second clerk slot is added (the Reiden two-scorer setup does not
+apply). `a1` / `a2` are always the two assistants (an assistant pair).
 
 ---
 
@@ -66,11 +66,11 @@ Add (all optional, backwards compatible):
 ```js
 {
   // existing: name, first, role, photo, birthday
-  roles: ["SR", "LR", "AS"],   // which slots this person may fill
+  roles: ["referee", "assistant", "clerk"], // which slots this person may fill
   country: "GER",               // nation (IFA events) — conflict check vs teams
   club: "Ahlhorner SV",         // club (EFA/club events) — conflict check vs teams
   gender: "f" | "m",
-  lrPair: "pair-3",             // optional id; two people with the same id form an LR pair
+  assistantPair: "pair-3",      // optional id; two people with the same id are assistant partners (picked as partner in the app)
   availability: {               // by date ("dd/mm/yy", as on games); missing date = available
     "12/09/26": { status: "available" | "reserve" | "unavailable",
                   slots: ["10:30", "11:45"] }   // optional whitelist of start times
@@ -101,7 +101,7 @@ Placement 3-5 (3rd place in the 5-team format) and Gold medal match.
 ### 2.4 Import
 
 Extend `importExcel.js` to read optional columns for referees: `Nation`,
-`Club`, `Gender`, `Official Roles`, `LR Pair`. Availability is edited in the app
+`Club`, `Gender`, `Official Roles` (English names, German words or the codes SR / AS / LR), `Assistant Pair` (older `LR Pair` accepted). Availability is edited in the app
 (new "Officials" card on the Referees page); an optional availability sheet
 import can follow later.
 
@@ -131,9 +131,9 @@ import can follow later.
 5. **Role not allowed**: person lacks the role for that slot (`roles`).
 6. **Women's finals gender rule**: in women's semifinals, bronze and final,
    at least one of `r1`/`r2` must be female.
-7. **Mandatory slots**: `r1`, `r2` are mandatory. `a1`/`a2` (LR) mandatory when
-   an LR pool exists. `clerk` (AS, the single scorer slot) is **optional**
-   unless the AS pool is non-empty (at club events teams provide their own
+7. **Mandatory slots**: `r1`, `r2` are mandatory. `a1`/`a2` (assistants) mandatory when
+   an assistant pool exists. `clerk` (the single scorer slot) is **optional**
+   unless the clerk pool is non-empty (at club events teams provide their own
    scorers).
 
 Hard rules are hard blocks, not warnings — this is a firm design principle.
@@ -147,10 +147,10 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
   Highest soft penalty, always shown as an orange warning, never a silent
   fallback. `r1` must always be neutral. Knockout = any game outside the group
   stage (`phase !== "group"`, or a round other than "Qualification round").
-- **Referee as line judge from a playing nation**: a person with the `SR`
+- **Referee as assistant from a playing nation**: a person with the `referee`
   role in `a1`/`a2` whose `country` equals either team's country → orange
-  warning and penalty. A referee as line judge from a neutral nation is fine;
-  pure line judges (no `SR` role) never get a nation warning.
+  warning and penalty. A referee as assistant from a neutral nation is fine;
+  pure assistants (no `referee` role) never get a nation warning.
 - **Reserve usage**: status `reserve` for that date → high penalty.
 - **Break violation**: same person in two consecutive rounds. Preferred is a
   free round after every game; two in a row are allowed but penalised, a
@@ -171,9 +171,9 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
 - Female referee on women's games (outside the hard-rule finals) — small bonus,
   lower weight than break violations.
 
-### 3.4 LR pairing (hard-coupled, "Option B")
+### 3.4 Assistant pairing (hard-coupled, "Option B")
 
-- Two people with the same `lrPair` are always assigned together to `a1` + `a2`.
+- Two people with the same `assistantPair` are always assigned together to `a1` + `a2`.
 - If one member is unavailable on a day, the pair dissolves **for that day**;
   the remaining member becomes a solo person.
 - Solo persons are a reserve fallback: they may fill `a1`/`a2` only when no
@@ -189,20 +189,20 @@ score(assignment) = Σ hard violations × ∞  (excluded)
                   + w_reserve   · reserve uses
                   + w_break     · break violations
                   + w_load      · load imbalance
-                  + w_lrClub    · line judges from a playing club
-                  + w_soloLR    · solo LR uses
-                  + w_srLRNation · referees as LR from a playing nation
+                  + w_assistantClub · assistants from a playing club
+                  + w_soloAssistant · solo assistant uses
+                  + w_refereeAsAssistantNation · referees as assistant from a playing nation
                   + w_repeat    · repeats
-                  − w_gender    · female SR on women's games
+                  − w_gender    · female referee on women's games
 ```
 
 Weights live in one config object (event-level, editable later), default
-ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_break > w_lrClub > w_srLRNation > w_soloLR > w_load > w_gender > w_repeat`.
+ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_break > w_assistantClub > w_refereeAsAssistantNation > w_soloAssistant > w_load > w_gender > w_repeat`.
 
 ### 3.6 Solver
 
-- Process games in chronological order; per game fill SR, then LR (pairs), then
-  AS. For a knockout `r2`, try every neutral candidate first; only if none is
+- Process games in chronological order; per game fill the referees, then the assistants (pairs),
+  then the clerk. For a knockout `r2`, try every neutral candidate first; only if none is
   eligible fall back to a non-neutral one (counted as a soft violation). For each slot choose the eligible candidate with the lowest marginal
   penalty; tie-break by fewest games so far, then name.
 - Repair pass for required slots that are still empty (the chronological
@@ -223,7 +223,7 @@ ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_break >
 - Header summary: number of hard/soft issues; click opens a list.
 - "Auto-assign" button → modal with the proposal as a diff (game, role,
   old → new) and the score delta → "Apply" writes via `saveGameRefs`.
-- "Officials" card: edit roles, country/club, gender, LR pair, availability per
+- "Officials" card: edit roles, country/club, gender, assistant partner, availability per
   day (available / reserve / unavailable + optional time slots).
 - Per-person load overview (games per day per role).
 
@@ -295,7 +295,7 @@ of kit changes**.
 ### 4.6 Referee shirts
 
 Officials' shirt colour is chosen per game so it does not clash with either
-team's kit. **All officials of a game (SR 1/2, AS, LR 1/2) wear the same
+team's kit. **All officials of a game (Referee 1/2, Clerk, Assistant 1/2) wear the same
 colour** — one value per game.
 
 **Data (entered per event):**
