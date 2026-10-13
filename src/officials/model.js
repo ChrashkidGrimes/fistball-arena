@@ -4,21 +4,21 @@
 
 import { flagFor } from "../flags.js";
 
-// Official roles: SR = referee (r1/r2), AS = scorer (clerk), LR = line judge (a1/a2).
-export const OFFICIAL_ROLES = ["SR", "AS", "LR"];
-export const SLOT_ROLE = { r1: "SR", r2: "SR", clerk: "AS", a1: "LR", a2: "LR" };
-// English names shown in the app (the codes stay in the data and the import).
-export const ROLE_LABEL = { SR: "Referee", AS: "Clerk", LR: "Assistant" };
+// Official roles: referee (Referee 1/2), clerk (scorer), assistant (line judge, Assistant 1/2).
+export const OFFICIAL_ROLES = ["referee", "clerk", "assistant"];
+export const SLOT_ROLE = { r1: "referee", r2: "referee", clerk: "clerk", a1: "assistant", a2: "assistant" };
+// Display names.
+export const ROLE_LABEL = { referee: "Referee", clerk: "Clerk", assistant: "Assistant" };
 export const AVAIL_STATUS = ["available", "reserve", "unavailable"];
 
 const norm = (s) => String(s ?? "").trim().toLowerCase();
 
-// "SR, LR" / "Referee; Line judge" / "Schiedsrichter/Anschreiber" → ["SR","LR",…]
-// (canonical order). Unknown words are ignored.
+// "Referee; Line judge" / "Schiedsrichter/Anschreiber" / the old codes "SR, LR"
+// → ["referee","assistant",…] (canonical order). Unknown words are ignored.
 const ROLE_WORDS = [
-  ["SR", /^(sr|r|ref|referee|schiedsrichter|árbitro|arbitro|umpire)$/],
-  ["AS", /^(as|clerk|scorer|scorekeeper|anschreiber|apontador|secretary)$/],
-  ["LR", /^(lr|a|assistant|line ?judge|lines(man|woman|person)|linienrichter|juiz de linha)$/],
+  ["referee", /^(sr|r|ref|referee|schiedsrichter|árbitro|arbitro|umpire)$/],
+  ["clerk", /^(as|clerk|scorer|scorekeeper|anschreiber|apontador|secretary)$/],
+  ["assistant", /^(lr|a|assistant|line ?judge|lines(man|woman|person)|linienrichter|juiz de linha)$/],
 ];
 export function parseRoles(v) {
   const words = (Array.isArray(v) ? v : String(v ?? "").split(/[,;/|+]+/)).map(norm).filter(Boolean);
@@ -36,8 +36,12 @@ export function parseGender(v) {
   return "";
 }
 
-// Roles a person may fill. Older docs have no `roles` → may fill any slot.
-export const rolesOf = (o) => (Array.isArray(o?.roles) && o.roles.length ? o.roles : OFFICIAL_ROLES);
+// Roles a person may fill. Docs without `roles` may fill any slot; roles saved
+// with the old codes (SR / AS / LR) are read as their new names.
+export const rolesOf = (o) => {
+  const r = Array.isArray(o?.roles) ? parseRoles(o.roles) : [];
+  return r.length ? r : OFFICIAL_ROLES;
+};
 export const canFill = (o, slot) => rolesOf(o).includes(SLOT_ROLE[slot]);
 
 // Availability on a game date ("dd/mm/yy"). Missing date = available, any time.
