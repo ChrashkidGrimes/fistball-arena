@@ -14,7 +14,7 @@ const KIT_BADGE = { clash: ["Clash", "kb-clash"], unresolvable: ["Can't resolve"
 // Common uniform colours. value is the stored hex; label for the tooltip.
 const PALETTE = [
   ["White", "#ffffff"], ["Black", "#1a1a1a"], ["Red", "#e23b3b"], ["Blue", "#2f6df0"],
-  ["Navy", "#1c2c66"], ["Sky", "#38bdf8"], ["Green", "#17915a"], ["Yellow", "#f2c20a"],
+  ["Navy", "#1c2c66"], ["Sky", "#38bdf8"], ["Green", "#17915a"], ["Mint", "#3eb489"], ["Yellow", "#f2c20a"],
   ["Orange", "#f2762e"], ["Pink", "#ec4899"], ["Purple", "#7c3aed"], ["Gray", "#9aa3b2"],
   ["Brown", "#8b5a2b"], ["Teal", "#14b8a6"], ["Maroon", "#7f1d1d"],
 ];
