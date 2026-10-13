@@ -183,6 +183,8 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
 
 ```
 score(assignment) = Σ hard violations × ∞  (excluded)
+                  + w_missingRef · empty Referee 1 / 2
+                  + w_missing   · empty required Clerk / Assistant
                   + w_r2Nation  · non-neutral knockout r2
                   + w_reserve   · reserve uses
                   + w_break     · break violations
@@ -195,7 +197,7 @@ score(assignment) = Σ hard violations × ∞  (excluded)
 ```
 
 Weights live in one config object (event-level, editable later), default
-ordering: `w_r2Nation ≫ w_reserve ≫ w_break > w_lrClub > w_srLRNation > w_soloLR > w_load > w_gender > w_repeat`.
+ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_break > w_lrClub > w_srLRNation > w_soloLR > w_load > w_gender > w_repeat`.
 
 ### 3.6 Solver
 
@@ -203,6 +205,12 @@ ordering: `w_r2Nation ≫ w_reserve ≫ w_break > w_lrClub > w_srLRNation > w_so
   AS. For a knockout `r2`, try every neutral candidate first; only if none is
   eligible fall back to a non-neutral one (counted as a soft violation). For each slot choose the eligible candidate with the lowest marginal
   penalty; tie-break by fewest games so far, then name.
+- Repair pass for required slots that are still empty (the chronological
+  greedy may have booked the only eligible people in a parallel game): move an
+  official over from another game of the same day and refill their old cell
+  with a free official or with one taken from a third cell (chains of up to two
+  moves), keeping the best chain while the score decreases. Because empty
+  slots are scored, an empty Referee 2 is traded for an empty Clerk.
 - Then a local-improvement pass (swap two officials between games of the same
   day) while the total score decreases.
 - Respect locked (manually entered) cells; only fill empty ones unless the admin
@@ -247,12 +255,15 @@ of kit changes**.
 1. No clashing game (except unresolvable ones).
 2. Minimise total kit changes over all teams.
 3. Minimise the number of teams that change at all.
-4. Alternate kits across days: prefer the **other** kit than the team's
+4. A referee shirt colour (4.6) contrasts with both teams' shirts. Ranked
+   after the kit changes, so it never forces a mid-day change — it only
+   overrides the preferences below.
+5. Alternate kits across days: prefer the **other** kit than the team's
    previous day (day 1 → Uniform 1, day 2 → Uniform 2, day 3 → Uniform 1, …).
    The previous day's kit is the one the team wore in most of its games that
    day (ties: the kit of its last game). Days without games for the team are
    skipped, so the alternation continues from its last playing day.
-5. Prefer Uniform 1 (effectively decides the team's first day).
+6. Prefer Uniform 1 (effectively decides the team's first day).
 
 ### 4.4 Algorithm
 
@@ -263,7 +274,7 @@ of kit changes**.
 - **Step 1 – one kit per day**: try to assign a day kit to every team in the
   component so that no game clashes (variables are only teams with 2 kits;
   components are small, so exhaustive search over 2^k is fine for k ≤ ~16, with
-  pruning). If feasible, pick the best one by objectives 4–5. Done.
+  pruning). If feasible, pick the best one by objectives 4–6. Done.
 - **Step 2 – minimal changes**: dynamic programming over the component's time
   slots in chronological order. State = the current kit of every team in the
   component (2^k). Transition to the next slot: every game in that slot must be
@@ -315,7 +326,8 @@ Exact ties go to the colour used least so far (neutral; no colour is
 preferred).
 
 **Algorithm:** run after the team kit solver (team kits first, then referee
-shirts). Per day: one colour for the whole day if one contrasts with every game;
+shirts; the team kit solver already prefers kit combinations for which a
+referee colour exists, objective 4.3/4). Per day: one colour for the whole day if one contrasts with every game;
 otherwise game by game in time order by the objective above. Manually set
 `game.kit.R` values are fixed unless the admin chooses "overwrite".
 
