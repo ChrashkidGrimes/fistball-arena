@@ -25,6 +25,14 @@ The first run builds the emulator image and installs `node_modules` inside the
 `podman compose logs -f app` shows the dev server output; `podman compose ps`
 should list `emulators` (healthy) and `app` (running), with `seed` exited.
 
+## Isolation from production
+
+In this environment the app only talks to the emulators: `.env.emulator` sets
+the offline-only project `demo-fistball`, the app refuses to start in emulator
+mode with any other project id, and the seed script refuses non-`demo-*`
+projects. Note that a plain `npm run dev` outside this setup (no `.env`) uses
+the **production** project.
+
 ## Sign in
 
 Click **Sign in with Google**. The Auth emulator opens a fake account chooser

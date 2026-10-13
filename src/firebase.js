@@ -38,6 +38,11 @@ export const USE_EMULATOR = env.VITE_USE_EMULATOR === "true";
 export const EMULATOR_HOST = env.VITE_EMULATOR_HOST || (typeof location !== "undefined" ? location.hostname : "localhost");
 export const FIRESTORE_EMULATOR_PORT = Number(env.VITE_FIRESTORE_EMULATOR_PORT) || 8080;
 if (USE_EMULATOR) {
+  // Never let the test environment reach a real project: Firebase treats
+  // "demo-*" ids as offline-only, so a misconfigured env fails loudly instead.
+  if (!firebaseConfig.projectId.startsWith("demo-")) {
+    throw new Error(`Emulator mode requires a "demo-*" project id, got "${firebaseConfig.projectId}".`);
+  }
   connectFirestoreEmulator(db, EMULATOR_HOST, FIRESTORE_EMULATOR_PORT);
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:${Number(env.VITE_AUTH_EMULATOR_PORT) || 9099}`, { disableWarnings: true });
 }
