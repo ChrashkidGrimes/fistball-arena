@@ -116,3 +116,22 @@ test("only the selected days are assigned", () => {
   assert.equal(at(res, g1).r1 ?? "", "");
   assert.ok(at(res, g2).r1);
 });
+
+test("repair: moves a neutral referee over from a parallel game instead of leaving Referee 2 empty", () => {
+  // Greedy fills the Austria game first (Ana + Hal, Vic as clerk), leaving
+  // only Pia for the Italy–Germany game. Moving Hal over and the German Vic
+  // into his place trades the empty Referee 2 for an empty Clerk.
+  const offs = [
+    ref("Ana", "Chile"), ref("Pia", "Brazil"),
+    { first: "Vic", name: "Ref", country: "Germany", gender: "m" }, // any slot
+    { first: "Hal", name: "Ref", country: "Norway", roles: ["SR", "AS"], gender: "m" },
+  ];
+  const a = game({ teamA: { name: "Austria" }, teamB: { name: "Switzerland" } });
+  const b = game({ teamA: { name: "Italy" }, teamB: { name: "Germany" }, court: 2 });
+  const res = autoAssign([a, b], offs, []);
+  const ra = at(res, a), rb = at(res, b);
+  assert.ok(ra.r1 && ra.r2 && rb.r1 && rb.r2, JSON.stringify({ ra, rb }));
+  assert.equal(res.after.counts.hard, 0);
+  assert.ok(![rb.r1, rb.r2].includes("Vic Ref"));
+  assert.deepEqual(res.unfilled.map((u) => u.slot), ["clerk", "clerk"]);
+});
