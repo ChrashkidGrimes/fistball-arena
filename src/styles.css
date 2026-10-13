@@ -1014,3 +1014,20 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .kit-teams .kit-n { font-weight: 700; color: var(--muted); font-size: 12px; margin-right: 2px; }
 .kit-sel { min-height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; background: #fff; font-size: 13px; margin-left: 6px; }
 .kit-teams .kit-sec th { text-align: left; background: var(--surface-2, #f3f5f9); font-size: 13px; padding: 8px 10px; }
+
+/* Plans (team uniforms / official day plans) — printable, one per page */
+.plan-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.filter-pill-group { display: inline-flex; gap: 6px; }
+.plan-card { max-width: none; }
+.plan-title { margin: 0 0 8px; font-size: 16px; }
+.plan-table td { vertical-align: top; }
+.plan-free td { color: var(--muted); background: #f7f8fb; }
+.plan-shirt { margin-right: 8px; white-space: nowrap; }
+.print-only { display: none; }
+@media print {
+  .sidebar, .sb-scrim, .appbar, .no-print { display: none !important; }
+  .shell { display: block; }
+  .plan-card { break-after: page; box-shadow: none; border: 0; padding: 0; }
+  .plan-card:last-of-type { break-after: auto; }
+  .print-only { display: block; }
+}
