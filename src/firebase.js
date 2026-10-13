@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from "firebase/firestore";
+import { getAuth, GoogleAuthProvider, connectAuthEmulator } from "firebase/auth";
 
 // Firebase project config (client-side, NOT secret — safe to ship publicly;
 // security is enforced by firestore.rules). To run your own instance, copy
@@ -29,6 +29,18 @@ try {
 }
 export const db = _db;
 export const auth = getAuth(app);
+
+// Local test environment (`vite --mode emulator`, see .env.emulator and
+// compose.yaml): talk to the Firebase Emulator Suite instead of the real
+// project. The emulator host defaults to the host serving the app, so a tablet
+// on the LAN opening http://<dev-machine>:5173 reaches the emulators too.
+export const USE_EMULATOR = env.VITE_USE_EMULATOR === "true";
+export const EMULATOR_HOST = env.VITE_EMULATOR_HOST || (typeof location !== "undefined" ? location.hostname : "localhost");
+export const FIRESTORE_EMULATOR_PORT = Number(env.VITE_FIRESTORE_EMULATOR_PORT) || 8080;
+if (USE_EMULATOR) {
+  connectFirestoreEmulator(db, EMULATOR_HOST, FIRESTORE_EMULATOR_PORT);
+  connectAuthEmulator(auth, `http://${EMULATOR_HOST}:${Number(env.VITE_AUTH_EMULATOR_PORT) || 9099}`, { disableWarnings: true });
+}
 export const googleProvider = new GoogleAuthProvider();
 // Always show Google's account chooser instead of silently reusing the one
 // signed-in account — organizers/officials often have several accounts.

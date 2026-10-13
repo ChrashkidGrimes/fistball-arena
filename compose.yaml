@@ -1,0 +1,68 @@
+# Local test environment: Firebase emulators + seeded demo data + Vite dev server.
+# Works with `podman compose` and `docker compose`. See docs/local-testing.md.
+#
+#   podman compose up -d --build     # start (first run builds the images)
+#   open http://localhost:5173       # the app, against the emulators
+#   open http://localhost:4001       # Emulator UI (data, users, rules log)
+#   podman compose down              # stop; emulator data is saved to a volume
+name: fistball-arena
+
+services:
+  emulators:
+    build:
+      context: .
+      dockerfile: docker/emulators.Dockerfile
+    volumes:
+      - ./firestore.rules:/work/firestore.rules:ro
+      - ./firestore.indexes.json:/work/firestore.indexes.json:ro
+      - emulator-data:/data
+    ports:
+      - "4001:4001"   # Emulator UI
+      - "4400:4400"   # hub (used by the UI)
+      - "4500:4500"   # logging (used by the UI)
+      - "8080:8080"   # Firestore
+      - "9150:9150"   # Firestore websocket (used by the UI)
+      - "9099:9099"   # Auth
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4400/emulators').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+    # Give the emulators time to export their data on shutdown.
+    stop_grace_period: 60s
+
+  # One-shot: loads demo users + a demo event. Skips if already seeded;
+  # `podman compose run --rm seed --reset` wipes all emulator data and reseeds.
+  seed:
+    image: node:22-trixie-slim
+    working_dir: /app
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+      - ./package.json:/app/package.json:ro
+    environment:
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+    entrypoint: ["node", "scripts/seed-emulator.mjs"]
+    depends_on:
+      emulators:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    image: node:22-trixie-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+    environment:
+      DEV_WATCH_POLLING: "true"
+    ports:
+      - "5173:5173"
+    entrypoint: ["/app/docker/app-entrypoint.sh"]
+    depends_on:
+      - emulators
+
+volumes:
+  emulator-data:
+  app-node-modules:

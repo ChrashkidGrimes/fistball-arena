@@ -5,6 +5,9 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vite.dev/config/
 export default defineConfig({
   base: "./",
+  // Bind-mounted sources in a container (Podman/Docker on macOS) don't deliver
+  // file-change events reliably; compose.yaml sets DEV_WATCH_POLLING=true.
+  server: process.env.DEV_WATCH_POLLING === "true" ? { watch: { usePolling: true, interval: 300 } } : {},
   plugins: [
     react(),
     VitePWA({
