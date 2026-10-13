@@ -146,7 +146,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (!me?.lrPair || other?.lrPair === me.lrPair) continue;
       const partner = (officials || []).find((p) => p !== me && p.lrPair === me.lrPair);
       if (partner && availabilityOn(partner, g.date).status !== "unavailable") {
-        add(g.id, s, "soft", "pairSplit", `LR pair "${me.lrPair}" split — partner ${officialName(partner)} not on the other line`);
+        add(g.id, s, "soft", "pairSplit", `LR partner ${officialName(partner)} is not on the other line`);
       }
     }
   }
