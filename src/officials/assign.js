@@ -13,7 +13,7 @@
 //
 // 1. Greedy: games in chronological order; per game the referees (as a pair,
 //    so the women's-finals rule and "r1 neutral" are handled together), then
-//    the line judges (LR pairs together), then the scorer. Each pick is the
+//    the assistants (pairs together), then the clerk. Each pick is the
 //    lowest marginal penalty; ties → fewest games so far, then name.
 // 2. Repair: an empty required slot is filled by moving someone over from
 //    another game of the same day (chains of up to two moves).
@@ -22,14 +22,14 @@
 // Locked cells (already filled) stay as they are unless opts.overwrite.
 
 import {
-  canFill, availabilityOn, availableAt, parseSlots,
+  canFill, parseRoles, availabilityOn, availableAt, parseSlots,
   teamMeta, sameCountry, sameClub, isWomensGame, isWomenFinal,
 } from "./model.js";
 import { checkAssignments, isKnockout, officialName, DEFAULT_RULES, SLOTS } from "./rules.js";
 import { isPlaceholder } from "../schedule/advance.js";
 
 // Penalty weights. Ordering per spec §3.5:
-// r2Nation ≫ reserve ≫ break > lrClub > srLRNation > soloLR > load > gender > repeat.
+// r2Nation ≫ reserve ≫ break > assistantClub > refereeAsAssistantNation > soloAssistant > load > gender > repeat.
 // Empty required slots rank between hard violations and r2Nation (a
 // non-neutral knockout r2 beats an empty one); an empty referee slot is far
 // worse than an empty scorer / line judge slot.
@@ -39,12 +39,12 @@ export const DEFAULT_WEIGHTS = {
   missing: 2e4,     // empty required Clerk / Assistant
   r2Nation: 1e5,    // knockout r2 from a playing nation
   reserve: 1e4,
-  pairSplit: 2000,  // splitting an intact LR pair
+  pairSplit: 2000,  // splitting an intact assistant pair
   maxPerDay: 1000,
   break: 300,       // per extra game in a row (2 in a row)
-  lrClub: 150,
-  srLRNation: 100,
-  soloLR: 60,       // a line judge not working with their pair partner
+  assistantClub: 150,
+  refereeAsAssistantNation: 100,
+  soloAssistant: 60,       // a line judge not working with their pair partner
   genderUnknown: 50,
   load: 10,         // per game already worked (balances the load)
   gender: 8,        // bonus: female referee on a women's game
@@ -55,7 +55,7 @@ const norm = (s) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 const timeKey = (t) => parseSlots(t)[0] || String(t ?? "").trim();
 const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); return (y || 0) * 10000 + (m || 0) * 100 + (d || 0); };
 const byTime = (a, b) => parseDate(a.date) - parseDate(b.date) || timeKey(a.time).localeCompare(timeKey(b.time)) || String(a.court).localeCompare(String(b.court)) || (a.nr || 0) - (b.nr || 0);
-const hasRole = (o, role) => Array.isArray(o?.roles) && o.roles.includes(role);
+const hasRole = (o, role) => Array.isArray(o?.roles) && parseRoles(o.roles).includes(role); // old codes read too
 const teamKey = (t) => norm(String(t?.name ?? t ?? ""));
 
 // Score of a grid: hard violations ≫ empty required slots ≫ weighted warnings,
@@ -65,7 +65,7 @@ export function gridScore(games, officials, entries, w = DEFAULT_WEIGHTS, rules 
   const res = checkAssignments(games, officials, entries, rules);
   return { res, score: scoreOf(res, games, officials, w) };
 }
-const SOFT_WEIGHT = { r2Nation: "r2Nation", reserve: "reserve", inRow: "break", lrClub: "lrClub", srLRNation: "srLRNation", maxPerDay: "maxPerDay", pairSplit: "pairSplit", gender: "genderUnknown" };
+const SOFT_WEIGHT = { r2Nation: "r2Nation", reserve: "reserve", inRow: "break", assistantClub: "assistantClub", refereeAsAssistantNation: "refereeAsAssistantNation", maxPerDay: "maxPerDay", pairSplit: "pairSplit", gender: "genderUnknown" };
 function scoreOf(res, games, officials, w) {
   let s = 0;
   for (const i of res.list) {
@@ -96,8 +96,8 @@ export function autoAssign(games, officials, entries, opts = {}) {
   const rules = { ...DEFAULT_RULES, ...opts.rules };
   const inScope = (g) => !opts.days?.length || opts.days.includes(g.date);
   const pool = (officials || []).filter((o) => officialName(o));
-  const lrPool = pool.some((o) => hasRole(o, "LR"));
-  const asPool = pool.some((o) => hasRole(o, "AS"));
+  const assistantPool = pool.some((o) => hasRole(o, "assistant"));
+  const clerkPool = pool.some((o) => hasRole(o, "clerk"));
   const keyOf = new Map(pool.map((o) => [o, norm(officialName(o))]));
   const byKey = new Map(pool.map((o) => [keyOf.get(o), o]));
 
@@ -146,10 +146,10 @@ export function autoAssign(games, officials, entries, opts = {}) {
     return n;
   };
 
-  // LR pairs per day: a pair is intact on a day unless a member is unavailable.
+  // Assistant pairs per day: a pair is intact on a day unless a member is unavailable.
   const partnerOf = (o, date) => {
-    if (!o?.lrPair) return null;
-    const p = pool.find((x) => x !== o && x.lrPair === o.lrPair);
+    if (!o?.assistantPair) return null;
+    const p = pool.find((x) => x !== o && x.assistantPair === o.assistantPair);
     if (!p) return null;
     if (availabilityOn(p, date).status === "unavailable" || availabilityOn(o, date).status === "unavailable") return null;
     return p;
@@ -168,7 +168,7 @@ export function autoAssign(games, officials, entries, opts = {}) {
     const A = teamMeta(entries, g.teamA), B = teamMeta(entries, g.teamB);
     const nation = o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country));
     const club = o.club && (sameClub(o.club, A.club) || sameClub(o.club, B.club));
-    const isRef = slot === "r1" || slot === "r2", isLR = slot === "a1" || slot === "a2";
+    const isRef = slot === "r1" || slot === "r2", isAssistant = slot === "a1" || slot === "a2";
     let c = 0;
     if (isRef) {
       if (club) return null;
@@ -178,9 +178,9 @@ export function autoAssign(games, officials, entries, opts = {}) {
       }
       if (isWomensGame(g) && o.gender === "f") c -= w.gender;
     }
-    if (isLR) {
-      if (club) c += w.lrClub;
-      if (nation && hasRole(o, "SR")) c += w.srLRNation;
+    if (isAssistant) {
+      if (club) c += w.assistantClub;
+      if (nation && hasRole(o, "referee")) c += w.refereeAsAssistantNation;
     }
     if (availabilityOn(o, g.date).status === "reserve") c += w.reserve;
     if (run >= rules.softInRow) c += w.break * (run - rules.softInRow + 1);
@@ -226,14 +226,14 @@ export function autoAssign(games, officials, entries, opts = {}) {
       }
     }
 
-    // Line judges: a1 + a2, LR pairs together (only when an LR pool exists).
+    // Assistants: a1 + a2, pairs together (only when an assistant pool exists).
     const l = ["a1", "a2"].filter(empty);
-    if (lrPool && l.length) {
+    if (assistantPool && l.length) {
       // Penalty for one line judge given who works the other line.
       const pairCost = (o, mate) => {
         const p = partnerOf(o, g.date);
         if (p) return mate === p ? 0 : w.pairSplit;
-        return w.soloLR;
+        return w.soloAssistant;
       };
       const ca = pool.map((o) => ({ o, c: cost(o, g, "a1") })).filter((x) => x.c !== null);
       if (l.length === 2) {
@@ -247,7 +247,7 @@ export function autoAssign(games, officials, entries, opts = {}) {
           const [x, y] = best.o.sort((p, q) => officialName(p).localeCompare(officialName(q)));
           set(g, "a1", x); set(g, "a2", y);
         } else {
-          const one = pick(ca.map((x) => ({ o: [x.o], c: x.c + w.soloLR })));
+          const one = pick(ca.map((x) => ({ o: [x.o], c: x.c + w.soloAssistant })));
           if (one) set(g, "a1", one.o[0]);
         }
       } else {
@@ -259,8 +259,8 @@ export function autoAssign(games, officials, entries, opts = {}) {
       }
     }
 
-    // Scorer (only when an AS pool exists; nation / club don't matter).
-    if (asPool && empty("clerk")) {
+    // Clerk (only when a clerk pool exists; nation / club don't matter).
+    if (clerkPool && empty("clerk")) {
       const best = pick(pool.map((o) => ({ o: [o], c: cost(o, g, "clerk") })).filter((x) => x.c !== null));
       if (best) set(g, "clerk", best.o[0]);
     }

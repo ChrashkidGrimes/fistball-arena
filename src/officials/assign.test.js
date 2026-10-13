@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { autoAssign } from "./assign.js";
 
 const D = "12/09/26", D2 = "13/09/26";
-const ref = (first, country, extra = {}) => ({ first, name: "Ref", country, roles: ["SR"], gender: "m", ...extra });
+const ref = (first, country, extra = {}) => ({ first, name: "Ref", country, roles: ["referee"], gender: "m", ...extra });
 let nr = 0;
 const game = (over = {}) => ({
   id: `g${++nr}`, nr, date: D, time: "10:00", court: 1, category: "National Teams Men", round: "Qualification round",
@@ -77,9 +77,9 @@ test("balances load and avoids games in a row", () => {
   assert.equal(res.after.list.filter((i) => i.code === "inRow").length, 0);
 });
 
-test("LR pairs work together; a pair dissolves when a member is away", () => {
+test("assistant pairs work together; a pair dissolves when a member is away", () => {
   const sr = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark")];
-  const lr = (first, pair, extra = {}) => ({ first, name: "Lr", roles: ["LR"], lrPair: pair, ...extra });
+  const lr = (first, pair, extra = {}) => ({ first, name: "Lr", roles: ["assistant"], assistantPair: pair, ...extra });
   const p1 = lr("P1", "p"), p2 = lr("P2", "p"), q1 = lr("Q1", "q"), solo = lr("Solo", "");
   const g = game();
   const r = at(autoAssign([g], [...sr, p1, solo, q1, p2], []), g);
@@ -93,11 +93,11 @@ test("LR pairs work together; a pair dissolves when a member is away", () => {
   assert.ok(!res.after.list.some((i) => i.code === "pairSplit"));
 });
 
-test("scorer: nation and club don't matter; only filled when an AS pool exists", () => {
+test("clerk: nation and club don't matter; only filled when a clerk pool exists", () => {
   const sr = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark")];
   const g = game();
   assert.equal(at(autoAssign([g], sr, []), g).clerk ?? "", "");
-  const as = { first: "Kurt", name: "Clerk", roles: ["AS"], country: "Germany" };
+  const as = { first: "Kurt", name: "Clerk", roles: ["clerk"], country: "Germany" };
   assert.equal(at(autoAssign([g], [...sr, as], []), g).clerk, "Kurt Clerk");
 });
 
@@ -124,7 +124,7 @@ test("repair: moves a neutral referee over from a parallel game instead of leavi
   const offs = [
     ref("Ana", "Chile"), ref("Pia", "Brazil"),
     { first: "Vic", name: "Ref", country: "Germany", gender: "m" }, // any slot
-    { first: "Hal", name: "Ref", country: "Norway", roles: ["SR", "AS"], gender: "m" },
+    { first: "Hal", name: "Ref", country: "Norway", roles: ["referee", "clerk"], gender: "m" },
   ];
   const a = game({ teamA: { name: "Austria" }, teamB: { name: "Switzerland" } });
   const b = game({ teamA: { name: "Italy" }, teamB: { name: "Germany" }, court: 2 });
