@@ -10,7 +10,7 @@
 // name-based checks (double booking, games in a row).
 
 import {
-  SLOT_ROLE, canFill, availabilityOn, availableAt, parseSlots,
+  SLOT_ROLE, ROLE_LABEL, canFill, availabilityOn, availableAt, parseSlots,
   teamMeta, sameCountry, sameClub, isWomenFinal,
 } from "./model.js";
 
@@ -100,7 +100,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (!o) continue; // not in the registry → nothing else to check
 
       // 5. Role not allowed (only when roles are set).
-      if (!canFill(o, slot)) add(g.id, slot, "hard", "role", `Not a ${{ SR: "referee", AS: "scorer", LR: "line judge" }[SLOT_ROLE[slot]]} (roles: ${o.roles.join(", ")})`);
+      if (!canFill(o, slot)) add(g.id, slot, "hard", "role", `Not a ${ROLE_LABEL[SLOT_ROLE[slot]].toLowerCase()} (roles: ${o.roles.map((x) => ROLE_LABEL[x] || x).join(", ")})`);
 
       // 3. Availability.
       const av = availabilityOn(o, g.date);
@@ -116,14 +116,14 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (nation) {
         if (slot === "r1" || (slot === "r2" && !ko)) add(g.id, slot, "hard", "nation", `Same nation as a team (${o.country})`);
         else if (slot === "r2") add(g.id, slot, "soft", "r2Nation", `Same nation as a team (${o.country}) — only if no neutral referee is available`);
-        else if (isLR && hasRole(o, "SR")) add(g.id, slot, "soft", "srLRNation", `Referee as line judge for own nation (${o.country})`);
+        else if (isLR && hasRole(o, "SR")) add(g.id, slot, "soft", "srLRNation", `Referee as assistant for own nation (${o.country})`);
       }
 
       // 2. Club: hard for referees, warning for line judges, irrelevant for the scorer.
       const club = o.club && [metaA.club, metaB.club].find((c) => sameClub(o.club, c));
       if (club) {
         if (isRef) add(g.id, slot, "hard", "club", `Same club as a team (${o.club})`);
-        else if (isLR) add(g.id, slot, "soft", "lrClub", `Line judge from a playing club (${o.club})`);
+        else if (isLR) add(g.id, slot, "soft", "lrClub", `Assistant from a playing club (${o.club})`);
       }
     }
 
@@ -146,7 +146,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (!me?.lrPair || other?.lrPair === me.lrPair) continue;
       const partner = (officials || []).find((p) => p !== me && p.lrPair === me.lrPair);
       if (partner && availabilityOn(partner, g.date).status !== "unavailable") {
-        add(g.id, s, "soft", "pairSplit", `LR partner ${officialName(partner)} is not on the other line`);
+        add(g.id, s, "soft", "pairSplit", `Assistant partner ${officialName(partner)} is not on the other line`);
       }
     }
   }
