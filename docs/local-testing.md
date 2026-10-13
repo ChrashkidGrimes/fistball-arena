@@ -52,7 +52,9 @@ courts: *National Teams U18 Men* (6 teams) and *U18 Women* (4 teams), with
 rosters, a schedule built by the same generator as the Settings wizard, and
 officials — twice what one round needs: 8 referees (SR, nation left blank to
 set on the Referees page), 4 scorers (AS) and 8 line judges (LR, 4 fixed
-pairs). It is also set as the live event. An archived event fills the timeline.
+pairs). Each team has two registered uniforms and the event has three
+referee shirt colours (mint green, black, red); no uniform is assigned to the
+games yet — try "Suggest uniforms" on the Uniforms page. It is also set as the live event. An archived event fills the timeline.
 
 ## Data & reset
 

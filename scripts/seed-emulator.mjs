@@ -72,6 +72,26 @@ function squad(teamIdx, women) {
 // officials fields from src/officials/model.js (older app versions ignore them).
 const official = (role, roles) => ([name, first, country, gender, lrPair]) =>
   ({ name, first, role, roles, country, gender, ...(lrPair ? { lrPair } : {}), photo: "", birthday: "" });
+// Uniforms: two kits per team (shirt + shorts; only shirts count for clashes)
+// and the event's referee shirt colours. Several teams share red / white, so
+// "all in Uniform 1" clashes and "Suggest uniforms" has something to solve;
+// every pairing (incl. knockout) is solvable, each with a fitting referee shirt.
+const WHITE = "#ffffff", BLACK = "#1a1a1a", RED = "#e23b3b", YELLOW = "#f2c20a", BLUE = "#2f6df0";
+const kits = (s1, h1, s2, h2) => [{ shirt: s1, shorts: h1 }, { shirt: s2, shorts: h2 }];
+const TEAM_KITS = {
+  Germany: kits(WHITE, BLACK, BLACK, WHITE),
+  Austria: kits(RED, WHITE, WHITE, RED),
+  Switzerland: kits(RED, RED, WHITE, WHITE),
+  Brazil: kits(YELLOW, BLUE, BLUE, WHITE),
+  Italy: kits(BLUE, WHITE, WHITE, BLUE),
+  Chile: kits(RED, BLUE, WHITE, BLUE),
+};
+const REF_KITS = [
+  { id: "ref-mint", name: "Mint green", shirt: "#3eb489" },
+  { id: "ref-black", name: "Black", shirt: BLACK },
+  { id: "ref-red", name: "Red", shirt: RED },
+];
+
 const REFEREES = [
   // Referees (SR)
   ...[
@@ -212,6 +232,7 @@ async function main() {
     eventId: EVENT_ID, name: event.name, place: event.place, address: event.address,
     dates: event.dates, startsAt: event.startDate, endsAt: event.endDate,
   }]);
+  docs.push([`public/teamkits_${EVENT_ID}`, { eventId: EVENT_ID, kits: TEAM_KITS, refKits: REF_KITS }]);
   docs.push(["public/live", { eventId: EVENT_ID, name: event.name, startsAt: event.startDate, endsAt: event.endDate, updatedAt: now }]);
 
   // Rosters, keyed "<team> - <category>" like the roster import.
@@ -250,7 +271,7 @@ async function main() {
   }]);
 
   await commit(docs);
-  console.log(`Seeded ${USERS.length} users, event "${event.name}" (${games.length} games, ${MEN.length + WOMEN.length} rosters, ${REFEREES.length} officials).`);
+  console.log(`Seeded ${USERS.length} users, event "${event.name}" (${games.length} games, ${MEN.length + WOMEN.length} rosters, ${REFEREES.length} officials, kits for ${Object.keys(TEAM_KITS).length} teams, ${REF_KITS.length} referee shirt colours).`);
   console.log("Sign in with one of: " + USERS.map((u) => u.email).join(", "));
 }
 
