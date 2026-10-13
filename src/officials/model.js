@@ -7,6 +7,8 @@ import { flagFor } from "../flags.js";
 // Official roles: SR = referee (r1/r2), AS = scorer (clerk), LR = line judge (a1/a2).
 export const OFFICIAL_ROLES = ["SR", "AS", "LR"];
 export const SLOT_ROLE = { r1: "SR", r2: "SR", clerk: "AS", a1: "LR", a2: "LR" };
+// English names shown in the app (the codes stay in the data and the import).
+export const ROLE_LABEL = { SR: "Referee", AS: "Clerk", LR: "Assistant" };
 export const AVAIL_STATUS = ["available", "reserve", "unavailable"];
 
 const norm = (s) => String(s ?? "").trim().toLowerCase();
