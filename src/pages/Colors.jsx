@@ -54,7 +54,7 @@ function ColorPick({ value, disabled, onPick, what = "shirt" }) {
   );
 }
 
-// Each team registers up to two uniforms (shirt + shorts colours). Referees
+// Each team registers up to two uniforms (shirt colours). Referees
 // then decide which one a team wears: for a whole day at once, or overriding a
 // single game. Admin only. Shown on the games list and on Fistball Live.
 export default function Colors() {
@@ -106,7 +106,7 @@ export default function Colors() {
   const fail = (e) => setStatus("Failed: " + (e?.code || e?.message || e));
   const setTeamColor = (t, n, part, color) => {
     const cur = teamKitsFor(teamKits, t.name, t.category);
-    const kits = [0, 1].map((i) => ({ shirt: "", shorts: "", ...(cur?.[i] || {}) }));
+    const kits = [0, 1].map((i) => ({ shirt: cur?.[i]?.shirt || "" })); // shorts are no longer kept
     kits[n - 1][part] = color;
     setTeamKits(t.key, kits).catch(fail);
   };
@@ -143,7 +143,6 @@ export default function Colors() {
       {[1, 2].map((n) => (
         <td key={n} className="clr-cell">
           <ColorPick what="shirt" value={teamKitsFor(teamKits, t.name, t.category)?.[n - 1]?.shirt || ""} disabled={archived} onPick={(c) => setTeamColor(t, n, "shirt", c)} />
-          <ColorPick what="shorts" value={teamKitsFor(teamKits, t.name, t.category)?.[n - 1]?.shorts || ""} disabled={archived} onPick={(c) => setTeamColor(t, n, "shorts", c)} />
         </td>
       ))}
     </tr>
@@ -186,14 +185,14 @@ export default function Colors() {
   return (
     <>
       <h2 className="page-h">Uniforms</h2>
-      <p className="muted-sm" style={{ marginTop: -8 }}>Register each team's uniforms (up to two: shirt and shorts colours), then set which one a team wears — for a whole day at once, or per game to override a specific round. Shows on the games list and in the Uniforms tab of Fistball Live.</p>
+      <p className="muted-sm" style={{ marginTop: -8 }}>Register each team's uniforms (up to two shirt colours), then set which one a team wears — for a whole day at once, or per game to override a specific round. Shows on the games list and in the Uniforms tab of Fistball Live.</p>
       {archived && <div className="warn-box">This event is archived — read-only.</div>}
 
       <div className="card" style={{ maxWidth: "none" }}>
         <h2>Team uniforms</h2>
         <div className="grid-scroll">
           <table className="ref-grid kit-teams">
-            <thead><tr><th className="rg-game">Team</th><th>Uniform 1 (shirt · shorts)</th><th>Uniform 2 (shirt · shorts)</th></tr></thead>
+            <thead><tr><th className="rg-game">Team</th><th>Uniform 1 (shirt)</th><th>Uniform 2 (shirt)</th></tr></thead>
             <tbody>
               {teams.length === 0 && <tr><td className="muted-sm" colSpan={3}>No teams yet — add them in Settings → Teams.</td></tr>}
               {[["Men", false], ["Women", true]].flatMap(([label, women]) => {
@@ -251,7 +250,7 @@ export default function Colors() {
           : null)}
         {refKits.length > 0 && nIssues("unresolvable", refIssues) > 0 && <span className="rg-pill rg-pill-missing" title="No referee shirt colour contrasts with both teams">{nIssues("unresolvable", refIssues)} without a fitting referee shirt</span>}
         {!archived && <button className="btn primary sm" onClick={() => setSuggestOpen(true)} disabled={!Object.keys(teamKits).length && !refKits.length} title={Object.keys(teamKits).length || refKits.length ? "" : "Register team uniforms first"}>Suggest uniforms…</button>}
-        <label className="rg-only" title="Colour distance (ΔE, CIE76) below which two shirts count as a clash. Higher = stricter. Shorts are ignored.">
+        <label className="rg-only" title="Colour distance (ΔE, CIE76) below which two shirts count as a clash. Higher = stricter.">
           Clash below ΔE <input type="number" min="5" max="80" key={threshold} defaultValue={threshold} disabled={archived} style={{ width: 56 }}
             onBlur={(e) => setThreshold(e.target.value)} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
         </label>
