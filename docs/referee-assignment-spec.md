@@ -71,6 +71,7 @@ Add (all optional, backwards compatible):
   club: "Ahlhorner SV",         // club (EFA/club events) — conflict check vs teams
   gender: "f" | "m",
   assistantPair: "pair-3",      // optional id; two people with the same id are assistant partners (picked as partner in the app)
+  rank: "top" | "good" | "normal", // referees only; missing = normal (see 3.4b)
   availability: {               // by date ("dd/mm/yy", as on games); missing date = available
     "12/09/26": { status: "available" | "reserve" | "unavailable",
                   slots: ["10:30", "11:45"] }   // optional whitelist of start times
@@ -179,6 +180,18 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
 - Solo persons are a reserve fallback: they may fill `a1`/`a2` only when no
   complete pair is available (penalty).
 
+### 3.4b Ranks (referees and games)
+
+- Referees have a rank: `top`, `good` or `normal` (default). Games have one
+  too: set per game (`game.rank`), otherwise semifinals, bronze / 3rd place
+  and the final are `top` and every other game is `normal`.
+- **Referee 1** should have at least the game's rank (Referee 2 is not
+  matched). A lower-ranked Referee 1 is a warning and a strong penalty per
+  level (`w_rankUnder`): above breaks and load balance, but never above a hard
+  rule — if no fitting referee is free, a lower-ranked one is used.
+- A referee (1 or 2) above the game's rank costs a small penalty per level
+  (`w_rankOver`), so top referees stay free for top games when it matters.
+
 ### 3.5 Scoring
 
 ```
@@ -186,6 +199,8 @@ score(assignment) = Σ hard violations × ∞  (excluded)
                   + w_missingRef · empty Referee 1 / 2
                   + w_missing   · empty required Clerk / Assistant
                   + w_r2Nation  · non-neutral knockout r2
+                  + w_rankUnder · Referee 1 below the game's rank (per level)
+                  + w_rankOver  · referees above the game's rank (per level)
                   + w_reserve   · reserve uses
                   + w_break     · break violations
                   + w_load      · load imbalance
@@ -197,7 +212,7 @@ score(assignment) = Σ hard violations × ∞  (excluded)
 ```
 
 Weights live in one config object (event-level, editable later), default
-ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_break > w_assistantClub > w_refereeAsAssistantNation > w_soloAssistant > w_load > w_gender > w_repeat`.
+ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_rankUnder > w_break > w_assistantClub > w_refereeAsAssistantNation > w_soloAssistant > w_rankOver > w_load > w_gender > w_repeat`.
 
 ### 3.6 Solver
 
