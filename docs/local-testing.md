@@ -50,8 +50,8 @@ with the seeded users (or *Add new account* for any other email):
 *Demo Cup* runs today and tomorrow (relative to when it was seeded) on two
 courts: *National Teams U18 Men* (6 teams) and *U18 Women* (4 teams), with
 rosters, a schedule built by the same generator as the Settings wizard, and
-officials — twice what one round needs: 8 referees (nation left blank to
-set on the Referees page), 4 clerks and 8 assistants (line judges, 4 fixed
+officials — twice what one round needs: 8 referees (six from playing nations,
+two neutral), 4 clerks and 8 assistants (line judges, 4 fixed
 pairs). Each team has two registered uniforms and the event has three
 referee shirt colours (mint green, black, red); no uniform is assigned to the
 games yet — try "Suggest uniforms" on the Uniforms page. It is also set as the live event. An archived event fills the timeline.

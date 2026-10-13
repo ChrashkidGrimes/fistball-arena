@@ -93,11 +93,12 @@ const REF_KITS = [
 ];
 
 const REFEREES = [
-  // Referees
+  // Referees: six from playing nations (they must not referee their own
+  // team), two neutral ones.
   ...[
-    ["Becker", "Thomas", "", "m"], ["Lehmann", "Sabine", "", "f"], ["Pereira", "João", "", "m"], ["Zanetti", "Marco", "", "m"],
-    ["Hofer", "Martin", "", "m"], ["Brunner", "Claudia", "", "f"], ["Vogel", "Stefan", "", "m"], ["Araya", "Camila", "", "f"],
-  ].map(official("Referee", ["referee"])).map(({ country, ...r }) => r), // nation left blank: set it on the Referees page
+    ["Becker", "Thomas", "Germany", "m"], ["Lehmann", "Sabine", "Namibia", "f"], ["Pereira", "João", "Brazil", "m"], ["Zanetti", "Marco", "Italy", "m"],
+    ["Hofer", "Martin", "Austria", "m"], ["Brunner", "Claudia", "Switzerland", "f"], ["Vogel", "Stefan", "United States", "m"], ["Araya", "Camila", "Chile", "f"],
+  ].map(official("Referee", ["referee"])),
   // Clerks
   ...[
     ["Krämer", "Ute", "Germany", "f"], ["Lindner", "Paul", "Austria", "m"], ["Meier", "Anna", "Switzerland", "f"], ["Souza", "Lucas", "Brazil", "m"],
