@@ -145,3 +145,19 @@ test("repair: moves a neutral referee over from a parallel game instead of leavi
   assert.ok(![rb.r1, rb.r2].includes("Vic Ref"));
   assert.deepEqual(res.unfilled.map((u) => u.slot), ["clerk", "clerk"]);
 });
+
+test("court manager: filled when someone has the role, may cover parallel courts, never doubles as another role", () => {
+  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ola", "Norway"), ref("Ida", "Italy"),
+    { first: "Carl", name: "Cm", roles: ["courtManager", "referee"], country: "Spain" }];
+  const g1 = game(), g2 = game({ court: 2, teamA: { name: "Austria" }, teamB: { name: "Chile" } });
+  const res = autoAssign([g1, g2], offs, []);
+  // Carl is the only court manager → both parallel games; so he can't referee at that time.
+  assert.equal(at(res, g1).cm, "Carl Cm");
+  assert.equal(at(res, g2).cm, "Carl Cm");
+  assert.ok(![g1, g2].some((g) => ["r1", "r2"].some((s) => at(res, g)[s] === "Carl Cm")));
+  assert.equal(res.after.counts.hard, 0);
+  // Without anyone holding the role, the slot stays empty and isn't required.
+  const res2 = autoAssign([game()], offs.slice(0, 4), []);
+  assert.equal(res2.games[0].refs.cm ?? "", "");
+  assert.ok(!res2.unfilled.some((u) => u.slot === "cm"));
+});

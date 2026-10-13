@@ -170,3 +170,22 @@ test("isKnockout and cellLevel", () => {
   assert.equal(cellLevel([{ level: "soft" }]), "soft");
   assert.equal(cellLevel(undefined), "");
 });
+
+test("court manager: several courts at once is fine, another role at the same time is not; no nation, break or maxPerDay rules", () => {
+  const cm = { first: "Carl", name: "Cm", roles: ["courtManager"], country: "Germany", maxPerDay: 1 };
+  const offs = [O.sui, O.den, { ...O.sui, first: "Ola" }, { ...O.den, first: "Ida" }, cm];
+  const g1 = game({ time: "09:00", court: 1, refs: { r1: N(O.sui), r2: N(O.den), cm: "Carl Cm" } });
+  const g2 = game({ time: "09:00", court: 2, refs: { r1: "Ola Sui", r2: "Ida Den", cm: "Carl Cm" } });
+  const g3 = game({ time: "10:00", court: 1, refs: { cm: "Carl Cm" } });
+  const g4 = game({ time: "11:00", court: 1, refs: { cm: "Carl Cm" } });
+  const res = checkAssignments([g1, g2, g3, g4], offs, []);
+  for (const g of [g1, g2, g3, g4]) assert.deepEqual(codes(res, g, "cm", ["inRow"]), [], g.id); // Germany plays: still fine
+  // Court manager on court 1 and referee on court 2 at the same time → double booking.
+  const g5 = game({ time: "09:00", court: 2, refs: { r1: "Carl Cm", r2: "Ida Den" } });
+  const res2 = checkAssignments([g1, g5], [...offs, { ...cm, roles: ["courtManager", "referee"] }], []);
+  assert.deepEqual(codes(res2, g1, "cm"), ["hard:double"]);
+  // Mandatory only when someone has the court manager role.
+  const g6 = game({ refs: { r1: N(O.sui), r2: N(O.den) } });
+  assert.deepEqual(codes(checkAssignments([g6], offs, []), g6, "cm", ["missing"]), ["hard:missing"]);
+  assert.deepEqual(codes(checkAssignments([g6], [O.sui, O.den], []), g6, "cm", ["missing"]), []);
+});

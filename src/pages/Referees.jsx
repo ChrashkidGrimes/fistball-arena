@@ -8,7 +8,7 @@ import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
 import AutoAssignModal from "./AutoAssignModal.jsx";
 
-const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["a1", "Assistant 1"], ["a2", "Assistant 2"]];
+const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["a1", "Assistant 1"], ["a2", "Assistant 2"], ["cm", "Court manager"]];
 const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); return new Date(2000 + (y || 0), (m || 1) - 1, d || 1); };
 const dayLabel = (s) => { const dt = parseDate(s); return `${dt.toLocaleDateString("en-US", { weekday: "short" })} ${dt.getDate()} ${dt.toLocaleDateString("en-US", { month: "short" })}`; };
 const refName = (r) => [r.first, r.name].filter(Boolean).join(" ").trim();
@@ -74,14 +74,14 @@ export default function Referees() {
   // with flag and short hints (own nation, busy at this time, away, already
   // in this game) so problems show before picking. "Other name…" allows a
   // name outside the registry.
-  const busyAt = new Map(); // "date|time" → name → [game nr]
+  const busyAt = new Map(); // "date|time" → name → [{ nr, slot }]
   for (const x of merged) for (const [k] of ROLES) {
     const n = String(x.refs?.[k] ?? "").trim().toLowerCase();
     if (!n) continue;
     const key = `${x.date}|${x.time}`;
     if (!busyAt.has(key)) busyAt.set(key, new Map());
     const m = busyAt.get(key);
-    m.set(n, [...(m.get(n) || []), x.nr]);
+    m.set(n, [...(m.get(n) || []), { nr: x.nr, slot: k }]);
   }
   // Wide enough for the longest name in the registry (flag + name), so every
   // picked name is shown in full; the hints only appear in the open list.
@@ -96,7 +96,8 @@ export default function Referees() {
     const label = (o) => {
       const n = refName(o), lower = n.toLowerCase(), hints = [];
       if (ROLES.some(([s]) => s !== k && String(valOf(g, s)).trim().toLowerCase() === lower)) hints.push("in this game");
-      const other = (busyAt.get(`${g.date}|${g.time}`)?.get(lower) || []).filter((nr) => nr !== g.nr);
+      // Court manager on other courts at the same time is fine (only for the court manager slot).
+      const other = (busyAt.get(`${g.date}|${g.time}`)?.get(lower) || []).filter((x) => x.nr !== g.nr && !(k === "cm" && x.slot === "cm")).map((x) => x.nr);
       if (other.length) hints.push(`busy (#${other.join(", #")})`);
       if (!availableAt(o, g.date, g.time)) hints.push("away");
       if ((k === "r1" || k === "r2") && o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country))) hints.push("own nation");
@@ -259,7 +260,7 @@ function IssueSummary({ check, games, day, showList, setShowList, issuesOnly, se
 
 // Games per official per day, split by role (referee 1/2, assistant 1/2,
 // clerk), to spot an uneven load at a glance.
-const ROLE_OF = { r1: "referee", r2: "referee", a1: "assistant", a2: "assistant", clerk: "clerk" };
+const ROLE_OF = { r1: "referee", r2: "referee", a1: "assistant", a2: "assistant", clerk: "clerk", cm: "courtManager" };
 function LoadOverview({ games, days, dayLabel }) {
   const rows = useMemo(() => {
     const m = new Map();
@@ -269,12 +270,12 @@ function LoadOverview({ games, days, dayLabel }) {
       const k = n.toLowerCase();
       if (!m.has(k)) m.set(k, { name: n, total: 0, day: {} });
       const r = m.get(k); r.total++;
-      const d = (r.day[g.date] ||= { referee: 0, assistant: 0, clerk: 0 }); d[role]++;
+      const d = (r.day[g.date] ||= { referee: 0, assistant: 0, clerk: 0, courtManager: 0 }); d[role]++;
     }
     return [...m.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   }, [games]);
   if (!rows.length) return null;
-  const fmt = (d) => (d ? ["referee", "assistant", "clerk"].filter((r) => d[r]).map((r) => `${d[r]}× ${ROLE_LABEL[r]}`).join(" · ") : "");
+  const fmt = (d) => (d ? ["referee", "assistant", "clerk", "courtManager"].filter((r) => d[r]).map((r) => `${d[r]}× ${ROLE_LABEL[r]}`).join(" · ") : "");
   return (
     <details className="adv-tool" style={{ marginBottom: 10 }}>
       <summary>Load per official</summary>
