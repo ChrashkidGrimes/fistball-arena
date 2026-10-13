@@ -22,7 +22,7 @@ const s = StyleSheet.create({
   foot: { position: "absolute", bottom: 16, left: 28, right: 28, fontSize: 7, color: "#888", textAlign: "center" },
 });
 // Team columns / official columns.
-const T = { day: { width: 70 }, time: { width: 40 }, court: { width: 40 }, game: { width: 150 }, opp: { flex: 1 }, kit: { width: 90 } };
+const T = { day: { width: 108 }, time: { width: 40 }, court: { width: 40 }, game: { width: 130 }, opp: { flex: 1 }, kit: { width: 90 } };
 const O = { time: { width: 40 }, role: { width: 80 }, court: { width: 46 }, game: { flex: 1 }, shirt: { width: 90 } };
 
 const dayLong = (v) => {
