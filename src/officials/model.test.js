@@ -23,7 +23,7 @@ test("parseGender", () => {
 });
 
 test("roles: missing roles = may fill any slot", () => {
-  assert.deepEqual(rolesOf({}), ["referee", "clerk", "assistant"]);
+  assert.deepEqual(rolesOf({}), ["referee", "clerk", "assistant", "courtManager"]);
   assert.equal(canFill({}, "a1"), true);
   const lr = { roles: ["assistant"] };
   assert.equal(canFill(lr, "a2"), true);
@@ -96,7 +96,16 @@ test("isWomenFinal: women's category and a finals round", () => {
 test("rolesOf reads roles saved with the old codes SR / AS / LR", () => {
   assert.deepEqual(rolesOf({ roles: ["SR", "LR"] }), ["referee", "assistant"]);
   assert.deepEqual(rolesOf({ roles: ["clerk"] }), ["clerk"]);
-  assert.deepEqual(rolesOf({}), ["referee", "clerk", "assistant"]);
+  assert.deepEqual(rolesOf({}), ["referee", "clerk", "assistant", "courtManager"]);
+});
+
+test("court manager role: parsed from words, its own slot", () => {
+  assert.deepEqual(parseRoles("Court manager"), ["courtManager"]);
+  assert.deepEqual(parseRoles("Referee, CM"), ["referee", "courtManager"]);
+  assert.deepEqual(parseRoles("Platzwart"), ["courtManager"]);
+  assert.ok(canFill({ roles: ["courtManager"] }, "cm"));
+  assert.ok(!canFill({ roles: ["courtManager"] }, "r1"));
+  assert.ok(canFill({}, "cm")); // no roles = any slot
 });
 
 test("ranks: referee default normal; games top for semifinal / bronze / final, else normal; override by hand", () => {

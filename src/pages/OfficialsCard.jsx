@@ -3,7 +3,7 @@ import { addReferee, updateReferee, deleteReferee } from "../cloud.js";
 import { OFFICIAL_ROLES, ROLE_LABEL, RANKS, RANK_LABEL, rankOf, AVAIL_STATUS, availabilityOn, parseSlots, rolesOf } from "../officials/model.js";
 import { flagFor } from "../flags.js";
 
-const ROLE_TITLE = { referee: "Referee 1 / 2", clerk: "Clerk (scorer)", assistant: "Assistant 1 / 2 (line judge)" };
+const ROLE_TITLE = { referee: "Referee 1 / 2", clerk: "Clerk (scorer)", assistant: "Assistant 1 / 2 (line judge)", courtManager: "Court manager (may cover several courts at once)" };
 const STATUS_LABEL = { available: "✓ available", reserve: "reserve", unavailable: "✕ away" };
 const refName = (r) => [r.first, r.name].filter(Boolean).join(" ").trim();
 const NONE = "\u0000none"; // filter value for "field is empty"
