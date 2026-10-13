@@ -210,7 +210,7 @@ export default function Referees() {
                   return (
                     <td key={k} className={`ag-cell ${lvl ? `rg-${empty ? "missing" : lvl}` : ""} ${isManual(g, k) ? "ag-manual" : ""}`}
                       title={[isManual(g, k) && "✎ Set by hand", ...(iss || []).map((i) => (i.level === "hard" ? "⛔ " : "⚠ ") + i.msg)].filter(Boolean).join("\n") || undefined}>
-                      {isManual(g, k) && <span className="ag-manual-mark" aria-label="Set by hand">✎</span>}
+                      {isManual(g, k) && <span className="ag-manual-mark" aria-label="Set by hand">✎ manual</span>}
                       {officialPicker(g, k, empty && lvl ? "required" : "—")}
                       {lvl && !empty && <span className={`rg-badge rg-badge-${lvl}`}>{iss.length > 1 ? iss.length : "!"}</span>}
                     </td>
