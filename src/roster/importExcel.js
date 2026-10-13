@@ -8,7 +8,8 @@
 // and a men's team stays as two separate rosters instead of merging into one.
 //
 // Optional referee columns (officials assignment): Nation, Club, Gender,
-// Official Roles ("SR, LR, AS"), LR Pair. Blank → left out, so a re-import keeps
+// Official Roles ("Referee, Assistant, Clerk" — also German words or the old
+// codes "SR, LR, AS"), Assistant Pair (or the older "LR Pair"). Blank → left out, so a re-import keeps
 // what was edited in the app.
 
 import { parseRoles, parseGender } from "../officials/model.js";
@@ -93,7 +94,8 @@ function buildFromRows(rows) {
       if (g("Nation") || g("Country")) ref.country = g("Nation") || g("Country");
       if (g("Club")) ref.club = g("Club");
       if (sex) ref.gender = sex;
-      if (g("LR Pair")) ref.lrPair = g("LR Pair");
+      const pair = g("Assistant Pair") || g("LR Pair");
+      if (pair) ref.assistantPair = pair;
       referees.push(ref);
       continue;
     }
