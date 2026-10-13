@@ -15,7 +15,9 @@
 //    so the women's-finals rule and "r1 neutral" are handled together), then
 //    the line judges (LR pairs together), then the scorer. Each pick is the
 //    lowest marginal penalty; ties → fewest games so far, then name.
-// 2. Local improvement: swap two officials between games of the same day while
+// 2. Repair: an empty required slot is filled by moving someone over from
+//    another game of the same day (chains of up to two moves).
+// 3. Local improvement: swap two officials between games of the same day while
 //    the day's score goes down and no hard violation is added (time-boxed).
 // Locked cells (already filled) stay as they are unless opts.overwrite.
 
@@ -28,8 +30,13 @@ import { isPlaceholder } from "../schedule/advance.js";
 
 // Penalty weights. Ordering per spec §3.5:
 // r2Nation ≫ reserve ≫ break > lrClub > srLRNation > soloLR > load > gender > repeat.
+// Empty required slots rank between hard violations and r2Nation (a
+// non-neutral knockout r2 beats an empty one); an empty referee slot is far
+// worse than an empty scorer / line judge slot.
 export const DEFAULT_WEIGHTS = {
   hard: 1e6,        // per hard violation (only used to compare whole grids)
+  missingRef: 5e5,  // empty Referee 1 / 2
+  missing: 2e4,     // empty required Clerk / Assistant
   r2Nation: 1e5,    // knockout r2 from a playing nation
   reserve: 1e4,
   pairSplit: 2000,  // splitting an intact LR pair
@@ -51,7 +58,7 @@ const byTime = (a, b) => parseDate(a.date) - parseDate(b.date) || timeKey(a.time
 const hasRole = (o, role) => Array.isArray(o?.roles) && o.roles.includes(role);
 const teamKey = (t) => norm(String(t?.name ?? t ?? ""));
 
-// Score of a grid: hard violations (except empty slots) ≫ weighted warnings,
+// Score of a grid: hard violations ≫ empty required slots ≫ weighted warnings,
 // plus team repeats, minus the gender bonus. Load is balanced in the greedy
 // pass; swaps between games don't change anyone's game count.
 export function gridScore(games, officials, entries, w = DEFAULT_WEIGHTS, rules = DEFAULT_RULES) {
@@ -62,7 +69,7 @@ const SOFT_WEIGHT = { r2Nation: "r2Nation", reserve: "reserve", inRow: "break", 
 function scoreOf(res, games, officials, w) {
   let s = 0;
   for (const i of res.list) {
-    if (i.code === "missing") continue;
+    if (i.code === "missing") { s += i.slot === "r1" || i.slot === "r2" ? w.missingRef : w.missing; continue; }
     s += i.level === "hard" ? w.hard : w[SOFT_WEIGHT[i.code]] || 0;
   }
   const byName = new Map(officials.map((o) => [norm(officialName(o)), o]));
@@ -187,7 +194,6 @@ export function autoAssign(games, officials, entries, opts = {}) {
   const tie = (a, b) => S(keyOf.get(a)).total - S(keyOf.get(b)).total || officialName(a).localeCompare(officialName(b));
   const pick = (cands) => cands.sort((x, y) => x.c - y.c || tie(x.o[0], y.o[0]) || (x.o[1] && y.o[1] ? tie(x.o[1], y.o[1]) : 0))[0];
 
-  const unfilled = [];
   const set = (g, slot, o) => { g.refs[slot] = officialName(o); book(keyOf.get(o), g); };
 
   for (const g of work) {
@@ -211,13 +217,12 @@ export function autoAssign(games, officials, entries, opts = {}) {
           // No valid pair (e.g. no female referee for a women's final): fill r1 only.
           const one = pick(c1.map((x) => ({ o: [x.o], c: x.c })));
           if (one && !isWomenFinal(g)) set(g, "r1", one.o[0]);
-          unfilled.push(...(one && !isWomenFinal(g) ? ["r2"] : ["r1", "r2"]).map((slot) => ({ gameId: g.id, slot })));
         }
       } else {
         const slot = r[0], other = g.refs[slot === "r1" ? "r2" : "r1"];
         const cands = (slot === "r1" ? c1 : c2).filter((x) => genderOk(x.o, other)).map((x) => ({ o: [x.o], c: x.c }));
         best = pick(cands);
-        if (best) set(g, slot, best.o[0]); else unfilled.push({ gameId: g.id, slot });
+        if (best) set(g, slot, best.o[0]);
       }
     }
 
@@ -244,21 +249,76 @@ export function autoAssign(games, officials, entries, opts = {}) {
         } else {
           const one = pick(ca.map((x) => ({ o: [x.o], c: x.c + w.soloLR })));
           if (one) set(g, "a1", one.o[0]);
-          unfilled.push(...(one ? ["a2"] : ["a1", "a2"]).map((slot) => ({ gameId: g.id, slot })));
         }
       } else {
         const slot = l[0];
         const mate = byKey.get(norm(g.refs[slot === "a1" ? "a2" : "a1"]));
         const cands = ca.map((x) => ({ o: [x.o], c: x.c + pairCost(x.o, mate) + (mate ? (partnerOf(mate, g.date) === x.o ? 0 : partnerOf(mate, g.date) ? w.pairSplit : 0) : 0) }));
         const best = pick(cands);
-        if (best) set(g, slot, best.o[0]); else unfilled.push({ gameId: g.id, slot });
+        if (best) set(g, slot, best.o[0]);
       }
     }
 
     // Scorer (only when an AS pool exists; nation / club don't matter).
     if (asPool && empty("clerk")) {
       const best = pick(pool.map((o) => ({ o: [o], c: cost(o, g, "clerk") })).filter((x) => x.c !== null));
-      if (best) set(g, "clerk", best.o[0]); else unfilled.push({ gameId: g.id, slot: "clerk" });
+      if (best) set(g, "clerk", best.o[0]);
+    }
+  }
+
+  const deadline = Date.now() + (opts.timeBudgetMs ?? 1500);
+  const locked = new Map(games.map((g) => [g.id, opts.overwrite ? {} : { ...(g.refs || {}) }]));
+  const fresh = (g, s) => g._target && !String(locked.get(g.id)?.[s] ?? "").trim() && String(g.refs[s] ?? "").trim();
+  const days = [...new Set(work.filter((g) => g._target).map((g) => g.date))];
+  const byId = new Map(work.map((g) => [g.id, g]));
+
+  // Repair: the greedy pass fills games in order, so a neutral referee may
+  // already be booked in a parallel game when a later game needs them. For
+  // each empty required slot, try moving someone X there from another newly
+  // filled cell of the same day, and refilling X's old cell with a free
+  // official or with someone Y taken from a third cell (which then stays
+  // empty). Empty slots are part of the score (referees ≫ scorer / line
+  // judges), so trading an empty Referee 2 for an empty Clerk is an
+  // improvement. Keep the best chain while the day's score drops and no hard
+  // violation is added; locked cells are never touched.
+  for (const date of days) {
+    const dayGames = work.filter((g) => g.date === date);
+    let cur = gridScore(dayGames, pool, entries, w, rules);
+    for (let step = 0; step < (opts.maxSwaps ?? 200) && Date.now() < deadline; step++) {
+      const holes = cur.res.list
+        .filter((i) => i.code === "missing" && byId.get(i.gameId)?._target)
+        .sort((a, b) => (b.slot === "r1" || b.slot === "r2") - (a.slot === "r1" || a.slot === "r2"));
+      const cells = [];
+      for (const g of dayGames) for (const s of SLOTS) if (fresh(g, s)) cells.push([g, s]);
+      let best = null;
+      const consider = (moves) => {
+        const undo = moves.map(([g, s, v]) => { const old = g.refs[s]; g.refs[s] = v; return [g, s, old]; });
+        const next = gridScore(dayGames, pool, entries, w, rules);
+        if (next.res.counts.hard <= cur.res.counts.hard && next.score < (best ? best.next.score : cur.score)) best = { next, moves };
+        for (const [g, s, old] of undo.reverse()) g.refs[s] = old;
+      };
+      for (const hole of holes) {
+        const g = byId.get(hole.gameId), s = hole.slot;
+        for (const [g2, s2] of cells) {
+          if (Date.now() >= deadline) break;
+          const v = g2.refs[s2], X = byKey.get(norm(v));
+          if (!X || !canFill(X, s) || !availableAt(X, g.date, g.time)) continue;
+          consider([[g2, s2, ""], [g, s, v]]);
+          for (const Y of pool) {
+            const vy = officialName(Y);
+            if (norm(vy) === norm(v) || !canFill(Y, s2) || !availableAt(Y, g2.date, g2.time)) continue;
+            consider([[g2, s2, vy], [g, s, v]]);
+            for (const [g3, s3] of cells) {
+              if ((g3 === g2 && s3 === s2) || norm(g3.refs[s3]) !== norm(vy)) continue;
+              consider([[g3, s3, ""], [g2, s2, vy], [g, s, v]]);
+            }
+          }
+        }
+        if (best) break; // re-plan from the improved grid
+      }
+      if (!best) break;
+      for (const [x, t, v] of best.moves) x.refs[t] = v;
+      cur = best.next;
     }
   }
 
@@ -267,10 +327,6 @@ export function autoAssign(games, officials, entries, opts = {}) {
   // the same kind on the same day; keep a swap if the day's score drops and no
   // hard violation is added. Only problem cells are tried, and the pass stops
   // after opts.timeBudgetMs (the greedy result alone is already valid).
-  const deadline = Date.now() + (opts.timeBudgetMs ?? 1500);
-  const locked = new Map(games.map((g) => [g.id, opts.overwrite ? {} : { ...(g.refs || {}) }]));
-  const fresh = (g, s) => g._target && !String(locked.get(g.id)?.[s] ?? "").trim() && String(g.refs[s] ?? "").trim();
-  const days = [...new Set(work.filter((g) => g._target).map((g) => g.date))];
   for (const date of days) {
     const dayGames = work.filter((g) => g.date === date);
     let cur = gridScore(dayGames, pool, entries, w, rules);
@@ -305,6 +361,9 @@ export function autoAssign(games, officials, entries, opts = {}) {
   }
   const before = gridScore(games, pool, entries, w, rules);
   const after = gridScore(out, pool, entries, w, rules);
+  // Required slots still empty in the assigned games (after the repair pass).
+  const target = new Set(work.filter((g) => g._target).map((g) => g.id));
+  const unfilled = after.res.list.filter((i) => i.code === "missing" && target.has(i.gameId)).map(({ gameId, slot }) => ({ gameId, slot }));
   return {
     proposals, games: out, skipped, unfilled,
     before: before.res, after: after.res, scoreBefore: before.score, scoreAfter: after.score,
