@@ -81,6 +81,18 @@ services:
       - app-node-modules:/app/node_modules
     environment:
       DEV_WATCH_POLLING: "true"
+      # Fail-safe: the demo project config is fixed here, at container start.
+      # Process env beats every .env file in Vite, so even if the mounted
+      # working tree is switched to a branch without .env.emulator or without
+      # the emulator code, the app uses the offline-only demo-fistball project
+      # and can never reach production. (Mirrors .env.emulator.)
+      VITE_USE_EMULATOR: "true"
+      VITE_FIREBASE_PROJECT_ID: demo-fistball
+      VITE_FIREBASE_API_KEY: demo-api-key
+      VITE_FIREBASE_AUTH_DOMAIN: demo-fistball.firebaseapp.com
+      VITE_FIREBASE_STORAGE_BUCKET: demo-fistball.appspot.com
+      VITE_FIREBASE_MESSAGING_SENDER_ID: "0"
+      VITE_FIREBASE_APP_ID: "1:0:web:0"
     ports:
       - "${BIND_ADDR:-127.0.0.1}:5173:5173"
     entrypoint: ["/app/docker/app-entrypoint.sh"]
