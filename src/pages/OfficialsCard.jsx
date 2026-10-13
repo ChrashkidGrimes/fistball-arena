@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { addReferee, updateReferee, deleteReferee } from "../cloud.js";
-import { OFFICIAL_ROLES, AVAIL_STATUS, availabilityOn, parseSlots, rolesOf } from "../officials/model.js";
+import { OFFICIAL_ROLES, ROLE_LABEL, AVAIL_STATUS, availabilityOn, parseSlots, rolesOf } from "../officials/model.js";
 import { flagFor } from "../flags.js";
 
-const ROLE_TITLE = { SR: "Referee (R1/R2)", AS: "Scorer / clerk", LR: "Line judge (A1/A2)" };
+const ROLE_TITLE = { SR: "Referee 1 / 2", AS: "Clerk (scorer)", LR: "Assistant 1 / 2 (line judge)" };
 const STATUS_LABEL = { available: "✓ available", reserve: "reserve", unavailable: "✕ away" };
 const refName = (r) => [r.first, r.name].filter(Boolean).join(" ").trim();
 const NONE = "\u0000none"; // filter value for "field is empty"
@@ -103,14 +103,14 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
   return (
     <details className="adv-tool officials-card">
       <summary>Officials ({refs.length}) — roles, nation / club, availability</summary>
-      <p className="muted-sm">Who may fill which slot, conflicts (referees never get games of their own nation or club; line judges are kept away from their own club where possible; for scorers neither matters), and availability per day. Empty roles = any slot; no entry for a day = available all day. LR partners always work the lines together. Saved automatically.</p>
+      <p className="muted-sm">Who may fill which slot, conflicts (referees never get games of their own nation or club; assistants are kept away from their own club where possible; for clerks neither matters), and availability per day. Empty roles = any slot; no entry for a day = available all day. Assistant partners always work the lines together. Saved automatically.</p>
       <datalist id="of-nations">{teamNations.map((n) => <option key={n} value={n} />)}</datalist>
       {filterOn && <p className="muted-sm of-count">{shown.length} of {rows.length} shown · <button className="link-btn" onClick={() => setFlt(NO_FILTER)}>Clear filters</button></p>}
       <div className="grid-scroll">
         <table className="ref-grid of-grid">
           <thead>
             <tr>
-              <th>Official</th><th>Roles</th><th>Gender</th><th>Nation</th><th>Club</th><th>LR partner</th><th title="Max games per day (optional)">Max/day</th>
+              <th>Official</th><th>Roles</th><th>Gender</th><th>Nation</th><th>Club</th><th>Assistant partner</th><th title="Max games per day (optional)">Max/day</th>
               {days.map((d) => <th key={d}>{dayLabel(d)}</th>)}
               <th aria-label="Remove" />
             </tr>
@@ -118,8 +118,8 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
               <tr className="of-filter">
                 <th><input className="of-input" value={flt.q} onChange={(e) => setF({ q: e.target.value })} placeholder="Filter name…" aria-label="Filter by name" /></th>
                 <th><span className="of-roles">{OFFICIAL_ROLES.map((x) => (
-                  <button key={x} className={`of-role ${flt.roles.includes(x) ? "on" : ""}`} title={`Only ${ROLE_TITLE[x]}`} aria-pressed={flt.roles.includes(x)}
-                    onClick={() => setF({ roles: flt.roles.includes(x) ? flt.roles.filter((y) => y !== x) : [...flt.roles, x] })}>{x}</button>
+                  <button key={x} className={`of-role ${flt.roles.includes(x) ? "on" : ""}`} title={`Only: ${ROLE_TITLE[x]}`} aria-pressed={flt.roles.includes(x)}
+                    onClick={() => setF({ roles: flt.roles.includes(x) ? flt.roles.filter((y) => y !== x) : [...flt.roles, x] })}>{ROLE_LABEL[x]}</button>
                 ))}</span></th>
                 <th><select className="of-input of-sm" value={flt.gender} onChange={(e) => setF({ gender: e.target.value })} aria-label="Filter by gender">
                   <option value="">All</option><option value="f">♀ f</option><option value="m">♂ m</option><option value={NONE}>— not set</option>
@@ -131,7 +131,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                     <option value={NONE}>— none</option>
                   </select></th>
                 ))}
-                <th><select className="of-input" value={flt.partner} onChange={(e) => setF({ partner: e.target.value })} aria-label="Filter by LR partner">
+                <th><select className="of-input" value={flt.partner} onChange={(e) => setF({ partner: e.target.value })} aria-label="Filter by assistant partner">
                   <option value="">All</option><option value="yes">With partner</option><option value="no">Without partner</option>
                 </select></th>
                 <th><select className="of-input of-xs" value={flt.max} onChange={(e) => setF({ max: e.target.value })} aria-label="Filter by max games per day">
@@ -157,7 +157,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                 <tr key={r.id}>
                   <td className="of-name"><span className="flag">{flagFor(r.country)}</span>{refName(r) || <span className="muted-sm">—</span>}</td>
                   <td><span className="of-roles">{OFFICIAL_ROLES.map((x) => (
-                    <button key={x} className={`of-role ${roles.includes(x) ? "on" : ""}`} disabled={archived} title={ROLE_TITLE[x]} onClick={() => toggleRole(r0, x)}>{x}</button>
+                    <button key={x} className={`of-role ${roles.includes(x) ? "on" : ""}`} disabled={archived} title={ROLE_TITLE[x]} onClick={() => toggleRole(r0, x)}>{ROLE_LABEL[x]}</button>
                   ))}</span></td>
                   <td>
                     <select className="of-input of-sm" value={r.gender || ""} disabled={archived} onChange={(e) => save(r0, { gender: e.target.value }, 0)} aria-label="Gender">
@@ -169,8 +169,8 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                   <td>{(() => {
                     const ps = partnersOf(r0), v = ps[0]?.id || "";
                     return (
-                      <select className="of-input" value={v} disabled={archived || !canLR(r)} onChange={(e) => setPartner(r0, e.target.value)} aria-label="LR partner"
-                        title={ps.length > 1 ? `Shared with ${ps.map((x) => refName(x)).join(", ")} — pick one partner` : canLR(r) ? undefined : "Only for line judges (role LR)"}>
+                      <select className="of-input" value={v} disabled={archived || !canLR(r)} onChange={(e) => setPartner(r0, e.target.value)} aria-label="Assistant partner"
+                        title={ps.length > 1 ? `Shared with ${ps.map((x) => refName(x)).join(", ")} — pick one partner` : canLR(r) ? undefined : "Only for assistants (line judges)"}>
                         <option value="">—</option>
                         {rows.filter((x) => x.id !== r.id && (canLR(cur(x)) || x.id === v)).map((x) => <option key={x.id} value={x.id}>{refName(x)}</option>)}
                       </select>
