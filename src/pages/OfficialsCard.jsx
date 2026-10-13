@@ -3,7 +3,7 @@ import { addReferee, updateReferee, deleteReferee } from "../cloud.js";
 import { OFFICIAL_ROLES, ROLE_LABEL, AVAIL_STATUS, availabilityOn, parseSlots, rolesOf } from "../officials/model.js";
 import { flagFor } from "../flags.js";
 
-const ROLE_TITLE = { SR: "Referee 1 / 2", AS: "Clerk (scorer)", LR: "Assistant 1 / 2 (line judge)" };
+const ROLE_TITLE = { referee: "Referee 1 / 2", clerk: "Clerk (scorer)", assistant: "Assistant 1 / 2 (line judge)" };
 const STATUS_LABEL = { available: "✓ available", reserve: "reserve", unavailable: "✕ away" };
 const refName = (r) => [r.first, r.name].filter(Boolean).join(" ").trim();
 const NONE = "\u0000none"; // filter value for "field is empty"
@@ -11,7 +11,7 @@ const NO_FILTER = { q: "", roles: [], gender: "", country: "", club: "", partner
 const low = (v) => String(v ?? "").trim().toLowerCase();
 
 // Officials registry editor on the Referees page: roles, nation / club (conflict
-// checks), gender, LR pair and per-day availability. Saved automatically.
+// checks), gender, assistant partner and per-day availability. Saved automatically.
 // See docs/referee-assignment-spec.md §2.1.
 export default function OfficialsCard({ refs, days, dayLabel, teamNations, archived }) {
   const [local, setLocal] = useState({});     // id -> patch (optimistic overlay)
@@ -37,7 +37,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
   };
 
   const toggleRole = (r, role) => {
-    const have = cur(r).roles?.length ? cur(r).roles : OFFICIAL_ROLES;
+    const have = rolesOf(cur(r));
     const next = OFFICIAL_ROLES.filter((x) => (x === role ? !have.includes(x) : have.includes(x)));
     save(r, { roles: next.length ? next : "" }, 0); // none ticked = any slot
   };
@@ -56,20 +56,20 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
     setSlotText((p) => { const n = { ...p }; delete n[k]; return n; });
   };
 
-  // LR partner: picked as a person, stored as a shared lrPair label on both
+  // Assistant partner: picked as a person, stored as a shared assistantPair label on both
   // (rules, auto-assign and the import work with the label).
-  const canLR = (r) => rolesOf(r).includes("LR");
-  const partnersOf = (r) => { const p = cur(r).lrPair; return p ? rows.filter((x) => x.id !== r.id && cur(x).lrPair === p) : []; };
+  const canAssist = (r) => rolesOf(r).includes("assistant");
+  const partnersOf = (r) => { const p = cur(r).assistantPair; return p ? rows.filter((x) => x.id !== r.id && cur(x).assistantPair === p) : []; };
   const setPartner = (r, partnerId) => {
     const p = rows.find((x) => x.id === partnerId);
     // Whoever either of them was paired with before is left without a partner.
     for (const x of [r, p].filter(Boolean)) {
-      for (const old of partnersOf(x)) if (old.id !== r.id && old.id !== p?.id) save(old, { lrPair: "" }, 0);
+      for (const old of partnersOf(x)) if (old.id !== r.id && old.id !== p?.id) save(old, { assistantPair: "" }, 0);
     }
-    if (!p) { save(r, { lrPair: "" }, 0); return; }
+    if (!p) { save(r, { assistantPair: "" }, 0); return; }
     const label = [r.id, p.id].sort().join("+");
-    save(r, { lrPair: label }, 0);
-    save(p, { lrPair: label }, 0);
+    save(r, { assistantPair: label }, 0);
+    save(p, { assistantPair: label }, 0);
   };
 
   // Column filters (all must match). Values come from the current (edited) rows.
@@ -152,7 +152,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
             {rows.length > 0 && shown.length === 0 && <tr><td className="muted-sm" colSpan={8 + days.length}>No officials match the filters.</td></tr>}
             {shown.map((r0) => {
               const r = cur(r0);
-              const roles = r.roles?.length ? r.roles : OFFICIAL_ROLES;
+              const roles = rolesOf(r);
               return (
                 <tr key={r.id}>
                   <td className="of-name"><span className="flag">{flagFor(r.country)}</span>{refName(r) || <span className="muted-sm">—</span>}</td>
@@ -169,10 +169,10 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                   <td>{(() => {
                     const ps = partnersOf(r0), v = ps[0]?.id || "";
                     return (
-                      <select className="of-input" value={v} disabled={archived || !canLR(r)} onChange={(e) => setPartner(r0, e.target.value)} aria-label="Assistant partner"
-                        title={ps.length > 1 ? `Shared with ${ps.map((x) => refName(x)).join(", ")} — pick one partner` : canLR(r) ? undefined : "Only for assistants (line judges)"}>
+                      <select className="of-input" value={v} disabled={archived || !canAssist(r)} onChange={(e) => setPartner(r0, e.target.value)} aria-label="Assistant partner"
+                        title={ps.length > 1 ? `Shared with ${ps.map((x) => refName(x)).join(", ")} — pick one partner` : canAssist(r) ? undefined : "Only for assistants (line judges)"}>
                         <option value="">—</option>
-                        {rows.filter((x) => x.id !== r.id && (canLR(cur(x)) || x.id === v)).map((x) => <option key={x.id} value={x.id}>{refName(x)}</option>)}
+                        {rows.filter((x) => x.id !== r.id && (canAssist(cur(x)) || x.id === v)).map((x) => <option key={x.id} value={x.id}>{refName(x)}</option>)}
                       </select>
                     );
                   })()}</td>
