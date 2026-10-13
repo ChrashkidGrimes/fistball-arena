@@ -94,11 +94,11 @@ const REF_KITS = [
 
 const REFEREES = [
   // Referees: six from playing nations (they must not referee their own
-  // team), two neutral ones.
+  // team), two neutral ones; ranks top / good / normal for the assignment.
   ...[
-    ["Becker", "Thomas", "Germany", "m"], ["Lehmann", "Sabine", "Namibia", "f"], ["Pereira", "João", "Brazil", "m"], ["Zanetti", "Marco", "Italy", "m"],
-    ["Hofer", "Martin", "Austria", "m"], ["Brunner", "Claudia", "Switzerland", "f"], ["Vogel", "Stefan", "United States", "m"], ["Araya", "Camila", "Chile", "f"],
-  ].map(official("Referee", ["referee"])),
+    ["Becker", "Thomas", "Germany", "m", "normal"], ["Lehmann", "Sabine", "Namibia", "f", "top"], ["Pereira", "João", "Brazil", "m", "good"], ["Zanetti", "Marco", "Italy", "m", "normal"],
+    ["Hofer", "Martin", "Austria", "m", "good"], ["Brunner", "Claudia", "Switzerland", "f", "good"], ["Vogel", "Stefan", "United States", "m", "top"], ["Araya", "Camila", "Chile", "f", "normal"],
+  ].map(([name, first, country, gender, rank]) => ({ ...official("Referee", ["referee"])([name, first, country, gender]), ...(rank !== "normal" ? { rank } : {}) })),
   // Clerks
   ...[
     ["Krämer", "Ute", "Germany", "f"], ["Lindner", "Paul", "Austria", "m"], ["Meier", "Anna", "Switzerland", "f"], ["Souza", "Lucas", "Brazil", "m"],
