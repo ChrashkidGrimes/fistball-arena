@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { subscribeGames, subscribeReferees, saveGameRefs, saveGameRank } from "../cloud.js";
+import { subscribeGames, subscribeReferees, saveGameRefs, saveGameRank, subscribeTeamKits, subscribeRefKits } from "../cloud.js";
+import { resolveKit, teamKitsFor } from "../kits.js";
+import { KitSwatch } from "../KitSwatch.jsx";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
 import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, availableAt, sameCountry, RANKS, RANK_LABEL, defaultGameRank, rankOf } from "../officials/model.js";
@@ -33,6 +35,10 @@ export default function Referees() {
 
   useEffect(() => subscribeGames(setGames), []);
   useEffect(() => subscribeReferees(setRefs), []);
+  const [teamKits, setTeamKits] = useState({});
+  const [refKits, setRefKits] = useState([]);
+  useEffect(() => subscribeTeamKits(setTeamKits), []);
+  useEffect(() => subscribeRefKits(setRefKits), []);
 
   const sortedRefs = useMemo(() => [...refs].sort((a, b) => refName(a).localeCompare(refName(b))), [refs]);
   const teamNations = useMemo(() => [...new Set((event?.entries || []).map((e) => teamMeta(event.entries, e.name).country).filter(Boolean))].sort(), [event]);
@@ -202,14 +208,25 @@ export default function Referees() {
               <tr key={g.id} className={saved[g.id] ? "rg-saved" : ""}>
                 <td className="rg-game" onClick={() => nav(`/e/${eventId}/game/${g.id}`)} title="Open game report">
                   <div className="rg-nr">#{g.nr} <span className="muted-sm">{g.time} · Court {g.court}</span></div>
-                  <div className="rg-teams"><span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} <span className="muted-sm">v</span> <span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)}</div>
+                  <div className="rg-teams">
+                    <KitSwatch kit={resolveKit(g.kit?.A, teamKitsFor(teamKits, g.teamA?.name, g.category))} size={12} /><span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} <span className="muted-sm">v</span>{" "}
+                    <KitSwatch kit={resolveKit(g.kit?.B, teamKitsFor(teamKits, g.teamB?.name, g.category))} size={12} /><span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)}
+                  </div>
                   <div className="muted-sm">{dayLabel(g.date)} · {g.category}</div>
-                  <select className={`rg-rank rg-rank-${g.rank || defaultGameRank(g)}`} value={g.rank || ""} disabled={archived} onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => saveGameRank(g.id, e.target.value).catch((err) => alert("Could not save the rank: " + (err?.code || err?.message || err)))}
-                    aria-label={`Rank of game ${g.nr}`} title="Game rank — auto-assign gives it a Referee 1 of at least this rank">
-                    <option value="">Auto: {RANK_LABEL[defaultGameRank(g)]}</option>
-                    {RANKS.map((x) => <option key={x} value={x}>{RANK_LABEL[x]}</option>)}
-                  </select>
+                  <div className="rg-meta" onClick={(e) => e.stopPropagation()}>
+                    <label className="muted-sm" title="Game category — auto-assign gives it a Referee 1 of at least this rank (by default semifinals, bronze and final are top)">
+                      Category{" "}
+                      <select className={`rg-rank rg-rank-${g.rank || defaultGameRank(g)}`} value={g.rank || defaultGameRank(g)} disabled={archived}
+                        onChange={(e) => saveGameRank(g.id, e.target.value === defaultGameRank(g) ? "" : e.target.value).catch((err) => alert("Could not save the category: " + (err?.code || err?.message || err)))}
+                        aria-label={`Category of game ${g.nr}`}>
+                        {RANKS.map((x) => <option key={x} value={x}>{RANK_LABEL[x]}</option>)}
+                      </select>
+                    </label>
+                    {(() => {
+                      const rk = refKits.find((r) => r.id === g.kit?.R);
+                      return rk ? <span className="muted-sm rg-refshirt" title="Referee shirt"><KitSwatch kit={{ shirt: rk.shirt }} size={12} /> {rk.name || "Referee shirt"}</span> : null;
+                    })()}
+                  </div>
                 </td>
                 {ROLES.map(([k]) => {
                   const iss = check.cells[g.id]?.[k];
