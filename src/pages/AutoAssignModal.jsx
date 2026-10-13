@@ -34,7 +34,7 @@ export default function AutoAssignModal({ games, refs, entries, days, day, dayLa
       <div className="modal aa-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <button className="modal-x" onClick={onClose} aria-label="Close" disabled={busy}>✕</button>
         <h3 className="modal-title">Auto-assign officials</h3>
-        <p className="muted-sm">Fills empty slots from the officials registry: no conflicts, LR pairs together, load spread evenly, breaks between games where possible. Nothing is saved until you click Apply.</p>
+        <p className="muted-sm">Fills empty slots from the officials registry: no conflicts, assistant pairs together, load spread evenly, breaks between games where possible. Nothing is saved until you click Apply.</p>
 
         <div className="aa-opts">
           <label>Days{" "}

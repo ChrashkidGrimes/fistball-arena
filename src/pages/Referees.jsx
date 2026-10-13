@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { subscribeGames, subscribeReferees, saveGameRefs } from "../cloud.js";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
-import { teamMeta } from "../officials/model.js";
+import { teamMeta, ROLE_LABEL } from "../officials/model.js";
 import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
 import AutoAssignModal from "./AutoAssignModal.jsx";
@@ -185,7 +185,7 @@ function LoadOverview({ games, days, dayLabel }) {
     return [...m.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   }, [games]);
   if (!rows.length) return null;
-  const fmt = (d) => (d ? ["SR", "LR", "AS"].filter((r) => d[r]).map((r) => `${d[r]} ${r}`).join(" · ") : "");
+  const fmt = (d) => (d ? ["SR", "LR", "AS"].filter((r) => d[r]).map((r) => `${d[r]}× ${ROLE_LABEL[r]}`).join(" · ") : "");
   return (
     <details className="adv-tool" style={{ marginBottom: 10 }}>
       <summary>Load per official</summary>
