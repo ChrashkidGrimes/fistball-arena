@@ -29,6 +29,8 @@ export default function Referees() {
   useEffect(() => subscribeReferees(setRefs), []);
 
   const names = useMemo(() => [...new Set(refs.map(refName).filter(Boolean))].sort(), [refs]);
+  // Flag of an official's nation, by the name typed in a cell.
+  const flagByName = useMemo(() => new Map(refs.map((r) => [refName(r).toLowerCase(), flagFor(r.country)])), [refs]);
   const teamNations = useMemo(() => [...new Set((event?.entries || []).map((e) => teamMeta(event.entries, e.name).country).filter(Boolean))].sort(), [event]);
   const days = useMemo(() => [...new Set(games.map((g) => g.date))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
   const shown = useMemo(() => {
@@ -88,6 +90,7 @@ export default function Referees() {
                 </td>
                 {ROLES.map(([k]) => (
                   <td key={k} className="ag-cell">
+                    <span className="flag">{flagByName.get(String(valOf(g, k)).trim().toLowerCase()) || ""}</span>
                     <input className="ref-input" list="ref-names" value={valOf(g, k)} disabled={archived}
                       onChange={(e) => setVal(g, k, e.target.value)} placeholder="—" />
                   </td>
