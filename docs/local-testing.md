@@ -63,6 +63,42 @@ podman compose run --rm seed --reset   # wipe ALL emulator data and reseed
 podman compose down -v                 # remove containers AND volumes (data + node_modules)
 ```
 
+## Testing with a copy of the production data
+
+You can load a copy of the production Firestore data into the emulators. The
+copy is made with a service account that may **only read** — the script checks
+that before the first request and stops if the key could write.
+
+**One-time setup** (needs IAM rights on the Google Cloud project, e.g. Owner —
+the in-app org-admin role is not enough):
+
+1. Google Cloud Console → project `fistball-arena` → *IAM & Admin* → *Service
+   accounts* → *Create service account*, e.g. `arena-prod-reader`.
+2. Grant it exactly one role: **Cloud Datastore Viewer**
+   (`roles/datastore.viewer`). Nothing else.
+3. *Keys* → *Add key* → *JSON*. Store the file **outside the repository**,
+   e.g. `~/.config/fistball-arena/prod-reader.json` (`chmod 600`).
+
+**Copy:**
+
+```bash
+PROD_READER_KEY=~/.config/fistball-arena/prod-reader.json podman compose run --rm prod-copy
+podman compose run --rm prod-copy --import-only   # reload the last copy (no prod access)
+```
+
+If the script says it could not verify the key's permissions, enable the
+*Cloud Resource Manager API* for the project (Console → *APIs & Services*); the
+check uses it to make sure the key cannot write.
+
+This **replaces all emulator data** (demo data and test accounts) with the
+copy. Sign in with your usual email in the emulator's account chooser — your
+role comes from the copied data. Login accounts themselves are not copied.
+
+The copy contains personal data (names, birthdays, photos). It lives only in
+the `prod-copy` and `emulator-data` volumes; remove them when done
+(`podman compose down -v`), and delete the key in the Cloud Console when you no
+longer need it. `podman compose run --rm seed --reset` goes back to demo data.
+
 ## Notes
 
 - **Ports** 4001, 4400, 4500, 5173, 8080, 9099 and 9150 must be free on the host.
@@ -78,3 +114,10 @@ podman compose down -v                 # remove containers AND volumes (data + n
   it was loaded from.
 - The broadcast overlay links still point to the hosted Fistball Live, which
   reads the real project — they won't show emulator data.
+
+## Open points
+
+- [ ] Decide whether a plain `npm run dev` (without `.env`) should default to
+  the emulators instead of the production project, with production only via an
+  explicit opt-in (e.g. `VITE_ALLOW_PROD=true`). Affects the maintainers' dev
+  workflow — to be checked.

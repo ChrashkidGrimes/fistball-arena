@@ -53,6 +53,26 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # On demand only (profile): copy the production data into the emulators,
+  # read-only on production. See docs/local-testing.md.
+  #   PROD_READER_KEY=/path/to/prod-reader.json podman compose run --rm prod-copy
+  prod-copy:
+    profiles: ["prod-copy"]
+    image: node:22-trixie-slim
+    working_dir: /app
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ${PROD_READER_KEY:-/dev/null}:/secrets/prod-reader.json:ro
+      - prod-copy:/copy
+    environment:
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+    entrypoint: ["node", "scripts/prod-copy.mjs"]
+    depends_on:
+      emulators:
+        condition: service_healthy
+    restart: "no"
+
   app:
     image: node:22-trixie-slim
     working_dir: /app
@@ -70,3 +90,4 @@ services:
 volumes:
   emulator-data:
   app-node-modules:
+  prod-copy:

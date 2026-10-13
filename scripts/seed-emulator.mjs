@@ -140,9 +140,10 @@ async function commit(docs) {
   }
 }
 
-async function exists(path) {
-  const res = await fetch(`http://${FS}/v1/${DOCS}/${path}`, { headers: OWNER });
-  return res.ok;
+// Any event at all? (Also true after loading a production copy.)
+async function hasEvents() {
+  const res = await fetch(`http://${FS}/v1/${DOCS}/events?pageSize=1&showMissing=true`, { headers: OWNER });
+  return res.ok && ((await res.json()).documents || []).length > 0;
 }
 
 // Create (or refresh) a Google-provider account in the Auth emulator. The
@@ -167,8 +168,8 @@ async function main() {
     await call(`http://${FS}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: "DELETE" });
     await call(`http://${AUTH}/emulator/v1/projects/${PROJECT}/accounts`, { method: "DELETE" });
     console.log("Emulator data wiped.");
-  } else if (await exists(`events/${EVENT_ID}`)) {
-    console.log(`Already seeded (events/${EVENT_ID} exists) — use --reset to start over.`);
+  } else if (await hasEvents()) {
+    console.log("Emulator already has events (demo data or a production copy) — use --reset to start over.");
     return;
   }
 

@@ -7,3 +7,6 @@ dist
 .env
 .env.local
 !.env.example
+
+# service-account keys (e.g. the read-only prod-copy key) — keep them outside the repo
+*prod-reader*.json
