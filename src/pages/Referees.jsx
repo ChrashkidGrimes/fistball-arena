@@ -209,8 +209,9 @@ export default function Referees() {
                 <td className="rg-game" onClick={() => nav(`/e/${eventId}/game/${g.id}`)} title="Open game report">
                   <div className="rg-nr">#{g.nr} <span className="muted-sm">{g.time} · Court {g.court}</span></div>
                   <div className="rg-teams">
-                    <KitSwatch kit={resolveKit(g.kit?.A, teamKitsFor(teamKits, g.teamA?.name, g.category))} size={12} /><span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} <span className="muted-sm">v</span>{" "}
-                    <KitSwatch kit={resolveKit(g.kit?.B, teamKitsFor(teamKits, g.teamB?.name, g.category))} size={12} /><span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)}
+                    <span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} <KitSwatch kit={resolveKit(g.kit?.A, teamKitsFor(teamKits, g.teamA?.name, g.category))} size={12} />
+                    <span className="muted-sm">v</span>{" "}
+                    <span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)} <KitSwatch kit={resolveKit(g.kit?.B, teamKitsFor(teamKits, g.teamB?.name, g.category))} size={12} />
                   </div>
                   <div className="muted-sm">{dayLabel(g.date)} · {g.category}</div>
                   <div className="rg-meta" onClick={(e) => e.stopPropagation()}>
@@ -224,7 +225,7 @@ export default function Referees() {
                     </label>
                     {(() => {
                       const rk = refKits.find((r) => r.id === g.kit?.R);
-                      return rk ? <span className="muted-sm rg-refshirt" title="Referee shirt"><KitSwatch kit={{ shirt: rk.shirt }} size={12} /> {rk.name || "Referee shirt"}</span> : null;
+                      return rk ? <span className="muted-sm rg-refshirt" title="Referee shirt">Referee <KitSwatch kit={{ shirt: rk.shirt }} size={12} /> {rk.name}</span> : null;
                     })()}
                   </div>
                 </td>
