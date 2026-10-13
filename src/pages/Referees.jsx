@@ -74,6 +74,19 @@ export default function Referees() {
     await Promise.all(Object.entries(next).map(([id, r]) => saveGameRefs(id, r)));
   };
 
+  // Remove every official from the games of the selected day (or all days).
+  // Existing game reports keep their referees; only the planning is cleared.
+  const clearAssignments = async () => {
+    const targets = merged.filter((g) => (day === "all" || g.date === day) && ROLES.some(([k]) => String(g.refs?.[k] ?? "").trim()));
+    if (!targets.length) { alert("No officials assigned" + (day === "all" ? "." : ` on ${dayLabel(day)}.`)); return; }
+    const when = day === "all" ? "all days" : dayLabel(day);
+    if (!confirm(`Remove all officials from ${targets.length} game${targets.length === 1 ? "" : "s"} (${when})? Game reports that already exist keep their referees.`)) return;
+    const empty = Object.fromEntries(ROLES.map(([k]) => [k, ""]));
+    setLocal((p) => ({ ...p, ...Object.fromEntries(targets.map((g) => [g.id, empty])) }));
+    try { await Promise.all(targets.map((g) => saveGameRefs(g.id, empty))); }
+    catch (e) { alert("Could not clear: " + (e?.code || e?.message || e)); }
+  };
+
   return (
     <>
       <h2 className="page-h">Referees</h2>
@@ -89,7 +102,12 @@ export default function Referees() {
       </div>
       <input className="game-search" style={{ maxWidth: 360, marginBottom: 10 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search game # or team…" />
 
-      {!archived && <button className="btn primary sm" style={{ marginBottom: 10 }} onClick={() => setAutoOpen(true)} disabled={!refs.length} title={refs.length ? "" : "Add officials first"}>Auto-assign…</button>}
+      {!archived && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button className="btn primary sm" onClick={() => setAutoOpen(true)} disabled={!refs.length} title={refs.length ? "" : "Add officials first"}>Auto-assign…</button>
+          <button className="btn sm" onClick={clearAssignments} title={day === "all" ? "Remove all officials from all games" : `Remove all officials from the games on ${dayLabel(day)}`}>Clear assignments…</button>
+        </div>
+      )}
       {autoOpen && <AutoAssignModal games={merged} refs={refs} entries={event?.entries || []} days={days} day={day} dayLabel={dayLabel} onApply={applyProposal} onClose={() => setAutoOpen(false)} />}
       <LoadOverview games={merged} days={days} dayLabel={dayLabel} />
       <IssueSummary check={check} games={games} day={day} showList={showList} setShowList={setShowList}
