@@ -39,7 +39,8 @@ export default function Referees() {
   const days = useMemo(() => [...new Set(games.map((g) => g.date))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
   // Rule checks over ALL games (games in a row / double booking span the day),
   // including unsaved edits. See src/officials/rules.js.
-  const merged = useMemo(() => games.map((g) => (local[g.id] ? { ...g, refs: local[g.id] } : g)), [games, local]);
+  const merged = useMemo(() => games.map((g) => (local[g.id] || localAuto[g.id]
+    ? { ...g, refs: local[g.id] || g.refs, refsAuto: localAuto[g.id] || g.refsAuto } : g)), [games, local, localAuto]);
   const check = useMemo(() => checkAssignments(merged, refs, event?.entries || []), [merged, refs, event]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
