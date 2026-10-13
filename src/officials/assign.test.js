@@ -161,3 +161,18 @@ test("court manager: filled when someone has the role, may cover parallel courts
   assert.equal(res2.games[0].refs.cm ?? "", "");
   assert.ok(!res2.unfilled.some((u) => u.slot === "cm"));
 });
+
+test("court manager: one per round covers all courts; rounds are spread evenly", () => {
+  const cm = (first) => ({ first, name: "Cm", roles: ["courtManager"], country: "Spain" });
+  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ola", "Norway"), ref("Ida", "Italy"), cm("Carl"), cm("Cora")];
+  const gs = [];
+  for (const time of ["09:00", "10:00", "11:00", "12:00"]) for (const court of [1, 2]) gs.push(game({ time, court }));
+  const res = autoAssign(gs, offs, []);
+  const byTime = {};
+  for (const g of res.games) (byTime[g.time] ||= new Set()).add(g.refs.cm);
+  for (const [t, names] of Object.entries(byTime)) assert.equal(names.size, 1, `${t}: ${[...names]}`);
+  const rounds = {};
+  for (const [, names] of Object.entries(byTime)) for (const n of names) rounds[n] = (rounds[n] || 0) + 1;
+  assert.deepEqual(Object.values(rounds).sort(), [2, 2]);
+  assert.equal(res.after.counts.hard, 0);
+});
