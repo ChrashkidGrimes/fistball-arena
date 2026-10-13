@@ -5,6 +5,10 @@
 #   open http://localhost:5173       # the app, against the emulators
 #   open http://localhost:4001       # Emulator UI (data, users, rules log)
 #   podman compose down              # stop; emulator data is saved to a volume
+#
+# Ports are published on 127.0.0.1 only: the emulators have no authentication
+# (anyone who can reach them can read, change or wipe all data). To test from
+# a tablet on a trusted LAN, start with BIND_ADDR=0.0.0.0.
 name: fistball-arena
 
 services:
@@ -17,12 +21,12 @@ services:
       - ./firestore.indexes.json:/work/firestore.indexes.json:ro
       - emulator-data:/data
     ports:
-      - "4001:4001"   # Emulator UI
-      - "4400:4400"   # hub (used by the UI)
-      - "4500:4500"   # logging (used by the UI)
-      - "8080:8080"   # Firestore
-      - "9150:9150"   # Firestore websocket (used by the UI)
-      - "9099:9099"   # Auth
+      - "${BIND_ADDR:-127.0.0.1}:4001:4001"   # Emulator UI
+      - "${BIND_ADDR:-127.0.0.1}:4400:4400"   # hub (used by the UI)
+      - "${BIND_ADDR:-127.0.0.1}:4500:4500"   # logging (used by the UI)
+      - "${BIND_ADDR:-127.0.0.1}:8080:8080"   # Firestore
+      - "${BIND_ADDR:-127.0.0.1}:9150:9150"   # Firestore websocket (used by the UI)
+      - "${BIND_ADDR:-127.0.0.1}:9099:9099"   # Auth
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4400/emulators').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 3s
@@ -58,7 +62,7 @@ services:
     environment:
       DEV_WATCH_POLLING: "true"
     ports:
-      - "5173:5173"
+      - "${BIND_ADDR:-127.0.0.1}:5173:5173"
     entrypoint: ["/app/docker/app-entrypoint.sh"]
     depends_on:
       - emulators

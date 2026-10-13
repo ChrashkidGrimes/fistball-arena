@@ -62,7 +62,11 @@ podman compose down -v                 # remove containers AND volumes (data + n
   file events from macOS bind mounts are unreliable.
 - **Dependencies:** `node_modules` lives in a container volume (the host's are
   built for macOS); it is reinstalled automatically when `package-lock.json` changes.
-- **Other devices** (e.g. a tablet on the LAN) can open `http://<your-mac>:5173`;
-  the app connects to the emulators on the same host it was loaded from.
+- **Only reachable from your Mac** by default (ports bound to `127.0.0.1`). The
+  emulators have no authentication — anyone who can reach them can read, change
+  or wipe all data. To test from another device (e.g. a tablet) on a **trusted**
+  network, start with `BIND_ADDR=0.0.0.0 podman compose up -d` and open
+  `http://<your-mac>:5173`; the app connects to the emulators on the same host
+  it was loaded from.
 - The broadcast overlay links still point to the hosted Fistball Live, which
   reads the real project — they won't show emulator data.
