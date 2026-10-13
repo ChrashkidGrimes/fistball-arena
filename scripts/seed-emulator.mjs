@@ -68,10 +68,10 @@ function squad(teamIdx, women) {
 }
 
 // Officials, twice what one round needs (2 courts → per round 4 referees,
-// 2 clerks, 4 assistants). `roles` / `country` / `gender` / `lrPair` are the
+// 2 clerks, 4 assistants). `roles` / `country` / `gender` / `assistantPair` are the
 // officials fields from src/officials/model.js (older app versions ignore them).
-const official = (role, roles) => ([name, first, country, gender, lrPair]) =>
-  ({ name, first, role, roles, country, gender, ...(lrPair ? { lrPair } : {}), photo: "", birthday: "" });
+const official = (role, roles) => ([name, first, country, gender, assistantPair]) =>
+  ({ name, first, role, roles, country, gender, ...(assistantPair ? { assistantPair } : {}), photo: "", birthday: "" });
 // Uniforms: two kits per team (shirt + shorts; only shirts count for clashes)
 // and the event's referee shirt colours. Several teams share red / white, so
 // "all in Uniform 1" clashes and "Suggest uniforms" has something to solve;
@@ -93,22 +93,22 @@ const REF_KITS = [
 ];
 
 const REFEREES = [
-  // Referees (SR)
+  // Referees
   ...[
     ["Becker", "Thomas", "", "m"], ["Lehmann", "Sabine", "", "f"], ["Pereira", "João", "", "m"], ["Zanetti", "Marco", "", "m"],
     ["Hofer", "Martin", "", "m"], ["Brunner", "Claudia", "", "f"], ["Vogel", "Stefan", "", "m"], ["Araya", "Camila", "", "f"],
-  ].map(official("Referee", ["SR"])).map(({ country, ...r }) => r), // nation left blank: set it on the Referees page
-  // Clerks (AS)
+  ].map(official("Referee", ["referee"])).map(({ country, ...r }) => r), // nation left blank: set it on the Referees page
+  // Clerks
   ...[
     ["Krämer", "Ute", "Germany", "f"], ["Lindner", "Paul", "Austria", "m"], ["Meier", "Anna", "Switzerland", "f"], ["Souza", "Lucas", "Brazil", "m"],
-  ].map(official("Clerk", ["AS"])),
-  // Assistants / line judges (LR), in fixed pairs
+  ].map(official("Clerk", ["clerk"])),
+  // Assistants (line judges), in fixed pairs
   ...[
-    ["Fuchs", "Jana", "Germany", "f", "LR-1"], ["Wolf", "Erik", "Germany", "m", "LR-1"],
-    ["Gruber", "Lisa", "Austria", "f", "LR-2"], ["Steiner", "Felix", "Austria", "m", "LR-2"],
-    ["Bianchi", "Giulia", "Italy", "f", "LR-3"], ["Ricci", "Luca", "Italy", "m", "LR-3"],
-    ["Rojas", "Diego", "Chile", "m", "LR-4"], ["Muñoz", "Valentina", "Chile", "f", "LR-4"],
-  ].map(official("Assistant", ["LR"])),
+    ["Fuchs", "Jana", "Germany", "f", "pair-1"], ["Wolf", "Erik", "Germany", "m", "pair-1"],
+    ["Gruber", "Lisa", "Austria", "f", "pair-2"], ["Steiner", "Felix", "Austria", "m", "pair-2"],
+    ["Bianchi", "Giulia", "Italy", "f", "pair-3"], ["Ricci", "Luca", "Italy", "m", "pair-3"],
+    ["Rojas", "Diego", "Chile", "m", "pair-4"], ["Muñoz", "Valentina", "Chile", "f", "pair-4"],
+  ].map(official("Assistant", ["assistant"])),
 ];
 
 // Event days: today and tomorrow, so the event shows up as "current".
