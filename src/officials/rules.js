@@ -14,8 +14,8 @@ import {
   teamMeta, sameCountry, sameClub, isWomenFinal,
 } from "./model.js";
 
-export const SLOTS = ["r1", "r2", "clerk", "a1", "a2"];
-export const SLOT_LABEL = { r1: "Referee 1", r2: "Referee 2", clerk: "Clerk", a1: "Assistant 1", a2: "Assistant 2" };
+export const SLOTS = ["r1", "r2", "clerk", "a1", "a2", "cm"];
+export const SLOT_LABEL = { r1: "Referee 1", r2: "Referee 2", clerk: "Clerk", a1: "Assistant 1", a2: "Assistant 2", cm: "Court manager" };
 
 export const DEFAULT_RULES = {
   softInRow: 2, // this many consecutive rounds → warning (a free round after every game is preferred)
@@ -47,6 +47,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
   for (const o of officials || []) { const k = norm(officialName(o)); if (k && !byName.has(k)) byName.set(k, o); }
   const assistantPool = poolHas(officials || [], "assistant");
   const clerkPool = poolHas(officials || [], "clerk");
+  const courtManagerPool = poolHas(officials || [], "courtManager");
 
   const cells = {};
   const list = [];
@@ -83,7 +84,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
     for (const slot of SLOTS) {
       const raw = String(refs[slot] ?? "").trim();
       if (!raw) {
-        const mandatory = slot === "r1" || slot === "r2" || ((slot === "a1" || slot === "a2") && assistantPool) || (slot === "clerk" && clerkPool);
+        const mandatory = slot === "r1" || slot === "r2" || ((slot === "a1" || slot === "a2") && assistantPool) || (slot === "clerk" && clerkPool) || (slot === "cm" && courtManagerPool);
         if (mandatory) add(g.id, slot, "hard", "missing", `${SLOT_LABEL[slot]} is required`);
         continue;
       }
@@ -95,7 +96,10 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       // 4. Double booking — twice in this game, or another game at the same start time.
       const twice = SLOTS.filter((s) => s !== slot && norm(refs[s]) === k);
       if (twice.length) add(g.id, slot, "hard", "double", `Also ${twice.map((s) => SLOT_LABEL[s]).join(", ")} in this game`);
-      const clash = (work.get(k) || []).filter((w) => w.game.id !== g.id && w.game.date === g.date && timeKey(w.game.time) === t);
+      // A court manager may cover several courts at once: court manager in
+      // parallel games is fine, any other role at the same time is not.
+      const clash = (work.get(k) || []).filter((w) => w.game.id !== g.id && w.game.date === g.date && timeKey(w.game.time) === t
+        && !(slot === "cm" && w.slot === "cm"));
       if (clash.length) add(g.id, slot, "hard", "double", `Also in game ${clash.map((w) => "#" + w.game.nr).join(", ")} at ${t}`);
 
       if (!o) continue; // not in the registry → nothing else to check
@@ -152,9 +156,11 @@ export function checkAssignments(games, officials, entries, opts = {}) {
     }
   }
 
-  // Per person and day: games in a row, and maxPerDay.
-  for (const [k, ws] of work) {
+  // Per person and day: games in a row, and maxPerDay (court manager duty
+  // doesn't count — they look after many games in a row by design).
+  for (const [k, all] of work) {
     const o = byName.get(k);
+    const ws = all.filter((w) => w.slot !== "cm");
     const byDay = new Map();
     for (const w of ws) { if (!byDay.has(w.game.date)) byDay.set(w.game.date, []); byDay.get(w.game.date).push(w); }
     for (const [date, dws] of byDay) {

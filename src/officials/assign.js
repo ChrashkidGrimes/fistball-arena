@@ -99,6 +99,7 @@ export function autoAssign(games, officials, entries, opts = {}) {
   const pool = (officials || []).filter((o) => officialName(o));
   const assistantPool = pool.some((o) => hasRole(o, "assistant"));
   const clerkPool = pool.some((o) => hasRole(o, "clerk"));
+  const courtManagerPool = pool.some((o) => hasRole(o, "courtManager"));
   const keyOf = new Map(pool.map((o) => [o, norm(officialName(o))]));
   const byKey = new Map(pool.map((o) => [keyOf.get(o), o]));
 
@@ -123,20 +124,23 @@ export function autoAssign(games, officials, entries, opts = {}) {
   const roundOf = (g) => roundIdx.get(g.date).get(timeKey(g.time));
 
   // Per person state, seeded from cells that are already filled.
-  const st = new Map(); // key → { total, day: {date: n}, rounds: {date: Set}, booked: Set(date|time), teams: Map }
+  // Court manager duty is kept apart (cm: Set(date|time), cmDay): it may run
+  // on several courts at once and doesn't count for load, breaks or maxPerDay.
+  const st = new Map(); // key → { total, day: {date: n}, rounds: {date: Set}, booked: Set(date|time), teams: Map, cm, cmDay }
   const S = (k) => {
-    if (!st.has(k)) st.set(k, { total: 0, day: {}, rounds: {}, booked: new Set(), teams: new Map() });
+    if (!st.has(k)) st.set(k, { total: 0, day: {}, rounds: {}, booked: new Set(), teams: new Map(), cm: new Set(), cmDay: {} });
     return st.get(k);
   };
-  const book = (k, g) => {
+  const book = (k, g, slot) => {
     const p = S(k);
+    if (slot === "cm") { p.cm.add(g.date + "|" + timeKey(g.time)); p.cmDay[g.date] = (p.cmDay[g.date] || 0) + 1; return; }
     p.total++;
     p.day[g.date] = (p.day[g.date] || 0) + 1;
     (p.rounds[g.date] ||= new Set()).add(roundOf(g));
     p.booked.add(g.date + "|" + timeKey(g.time));
     for (const t of [teamKey(g.teamA), teamKey(g.teamB)]) p.teams.set(t, (p.teams.get(t) || 0) + 1);
   };
-  for (const g of work) for (const s of SLOTS) { const k = norm(g.refs[s]); if (k) book(k, g); }
+  for (const g of work) for (const s of SLOTS) { const k = norm(g.refs[s]); if (k) book(k, g, s); }
 
   // Length of the run of consecutive rounds that `r` would be part of.
   const runWith = (k, date, r) => {
@@ -164,6 +168,14 @@ export function autoAssign(games, officials, entries, opts = {}) {
     if (!availableAt(o, g.date, g.time)) return null;
     if (SLOTS.some((s) => norm(g.refs[s]) === k)) return null;
     if (S(k).booked.has(g.date + "|" + timeKey(g.time))) return null;
+    if (slot === "cm") {
+      // Court manager: role, availability and no other duty at this time;
+      // other courts at the same time are fine. Spread the duty evenly.
+      let c = w.load * (S(k).cmDay[g.date] || 0);
+      if (availabilityOn(o, g.date).status === "reserve") c += w.reserve;
+      return c;
+    }
+    if (S(k).cm.has(g.date + "|" + timeKey(g.time))) return null;
     const run = runWith(k, g.date, roundOf(g));
     if (run >= rules.hardInRow) return null;
     const A = teamMeta(entries, g.teamA), B = teamMeta(entries, g.teamB);
@@ -195,7 +207,7 @@ export function autoAssign(games, officials, entries, opts = {}) {
   const tie = (a, b) => S(keyOf.get(a)).total - S(keyOf.get(b)).total || officialName(a).localeCompare(officialName(b));
   const pick = (cands) => cands.sort((x, y) => x.c - y.c || tie(x.o[0], y.o[0]) || (x.o[1] && y.o[1] ? tie(x.o[1], y.o[1]) : 0))[0];
 
-  const set = (g, slot, o) => { g.refs[slot] = officialName(o); book(keyOf.get(o), g); };
+  const set = (g, slot, o) => { g.refs[slot] = officialName(o); book(keyOf.get(o), g, slot); };
 
   for (const g of work) {
     if (!g._target) continue;
@@ -265,6 +277,12 @@ export function autoAssign(games, officials, entries, opts = {}) {
       const best = pick(pool.map((o) => ({ o: [o], c: cost(o, g, "clerk") })).filter((x) => x.c !== null));
       if (best) set(g, "clerk", best.o[0]);
     }
+
+    // Court manager (only when a court manager pool exists).
+    if (courtManagerPool && empty("cm")) {
+      const best = pick(pool.map((o) => ({ o: [o], c: cost(o, g, "cm") })).filter((x) => x.c !== null));
+      if (best) set(g, "cm", best.o[0]);
+    }
   }
 
   const deadline = Date.now() + (opts.timeBudgetMs ?? 1500);
@@ -300,6 +318,8 @@ export function autoAssign(games, officials, entries, opts = {}) {
       };
       for (const hole of holes) {
         const g = byId.get(hole.gameId), s = hole.slot;
+        // Direct fill: someone free by now (or a court manager on a parallel court).
+        for (const o of pool) if (canFill(o, s) && availableAt(o, g.date, g.time)) consider([[g, s, officialName(o)]]);
         for (const [g2, s2] of cells) {
           if (Date.now() >= deadline) break;
           const v = g2.refs[s2], X = byKey.get(norm(v));

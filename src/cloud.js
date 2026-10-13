@@ -688,7 +688,7 @@ export function subscribeReferees(cb) {
 // other filled slot counts as set by hand (see the Referees page).
 export async function saveGameRefs(gameId, refs, auto) {
   const patch = { refs };
-  if (auto) patch.refsAuto = Object.fromEntries(["r1", "r2", "clerk", "a1", "a2"].map((s) => [s, !!auto[s]]));
+  if (auto) patch.refsAuto = Object.fromEntries(["r1", "r2", "clerk", "a1", "a2", "cm"].map((s) => [s, !!auto[s]]));
   await setDoc(edoc("games", gameId), patch, { merge: true });
 }
 
