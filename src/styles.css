@@ -884,6 +884,9 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .of-input { width: 120px; min-height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: #fff; font-size: 13px; }
 .of-input.of-sm { width: 100px; }
 .of-input.of-xs { width: 60px; }
+.of-filter th { background: var(--bg-elev, #f6f7fb); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.of-count { margin: 4px 0; }
+.link-btn { border: 0; background: none; padding: 0; color: var(--brand); font: inherit; text-decoration: underline; cursor: pointer; }
 .of-day .of-slots { display: block; margin-top: 3px; }
 .of-day.of-reserve { background: #fdf6e9; }
 .of-day.of-unavailable { background: #fbeaec; }
