@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { subscribeGames, subscribeReferees, saveGameRefs } from "../cloud.js";
+import { subscribeGames, subscribeReferees, saveGameRefs, saveGameRank } from "../cloud.js";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
-import { teamMeta, ROLE_LABEL } from "../officials/model.js";
+import { teamMeta, ROLE_LABEL, RANKS, RANK_LABEL, defaultGameRank } from "../officials/model.js";
 import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
 import AutoAssignModal from "./AutoAssignModal.jsx";
@@ -131,6 +131,12 @@ export default function Referees() {
                   <div className="rg-nr">#{g.nr} <span className="muted-sm">{g.time} · Court {g.court}</span></div>
                   <div className="rg-teams"><span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} <span className="muted-sm">v</span> <span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)}</div>
                   <div className="muted-sm">{dayLabel(g.date)} · {g.category}</div>
+                  <select className={`rg-rank rg-rank-${g.rank || defaultGameRank(g)}`} value={g.rank || ""} disabled={archived} onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => saveGameRank(g.id, e.target.value).catch((err) => alert("Could not save the rank: " + (err?.code || err?.message || err)))}
+                    aria-label={`Rank of game ${g.nr}`} title="Game rank — auto-assign gives it a Referee 1 of at least this rank">
+                    <option value="">Auto: {RANK_LABEL[defaultGameRank(g)]}</option>
+                    {RANKS.map((x) => <option key={x} value={x}>{RANK_LABEL[x]}</option>)}
+                  </select>
                 </td>
                 {ROLES.map(([k]) => {
                   const iss = check.cells[g.id]?.[k];

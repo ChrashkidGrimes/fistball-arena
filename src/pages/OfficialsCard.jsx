@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState } from "react";
 import { addReferee, updateReferee, deleteReferee } from "../cloud.js";
-import { OFFICIAL_ROLES, ROLE_LABEL, AVAIL_STATUS, availabilityOn, parseSlots, rolesOf } from "../officials/model.js";
+import { OFFICIAL_ROLES, ROLE_LABEL, RANKS, RANK_LABEL, rankOf, AVAIL_STATUS, availabilityOn, parseSlots, rolesOf } from "../officials/model.js";
 import { flagFor } from "../flags.js";
 
 const ROLE_TITLE = { referee: "Referee 1 / 2", clerk: "Clerk (scorer)", assistant: "Assistant 1 / 2 (line judge)" };
 const STATUS_LABEL = { available: "✓ available", reserve: "reserve", unavailable: "✕ away" };
 const refName = (r) => [r.first, r.name].filter(Boolean).join(" ").trim();
 const NONE = "\u0000none"; // filter value for "field is empty"
-const NO_FILTER = { q: "", roles: [], gender: "", country: "", club: "", partner: "", max: "", day: {} };
+const NO_FILTER = { q: "", roles: [], rank: "", gender: "", country: "", club: "", partner: "", max: "", day: {} };
 const low = (v) => String(v ?? "").trim().toLowerCase();
 
 // Officials registry editor on the Referees page: roles, nation / club (conflict
@@ -82,6 +82,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
     const r = cur(r0);
     if (flt.q && !low(refName(r)).includes(low(flt.q))) return false;
     if (flt.roles.length && !flt.roles.some((x) => rolesOf(r).includes(x))) return false;
+    if (flt.rank && rankOf(r) !== flt.rank) return false;
     if (flt.gender && (flt.gender === NONE ? r.gender : r.gender !== flt.gender)) return false;
     if (!pick(flt.country, r.country) || !pick(flt.club, r.club)) return false;
     if (flt.partner && (partnersOf(r0).length > 0) !== (flt.partner === "yes")) return false;
@@ -110,7 +111,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
         <table className="ref-grid of-grid">
           <thead>
             <tr>
-              <th>Official</th><th>Roles</th><th>Gender</th><th>Nation</th><th>Club</th><th>Assistant partner</th><th title="Max games per day (optional)">Max/day</th>
+              <th>Official</th><th>Roles</th><th title="Auto-assign gives a game a Referee 1 of at least the game's rank">Rank</th><th>Gender</th><th>Nation</th><th>Club</th><th>Assistant partner</th><th title="Max games per day (optional)">Max/day</th>
               {days.map((d) => <th key={d}>{dayLabel(d)}</th>)}
               <th aria-label="Remove" />
             </tr>
@@ -121,6 +122,9 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                   <button key={x} className={`of-role ${flt.roles.includes(x) ? "on" : ""}`} title={`Only: ${ROLE_TITLE[x]}`} aria-pressed={flt.roles.includes(x)}
                     onClick={() => setF({ roles: flt.roles.includes(x) ? flt.roles.filter((y) => y !== x) : [...flt.roles, x] })}>{ROLE_LABEL[x]}</button>
                 ))}</span></th>
+                <th><select className="of-input of-sm" value={flt.rank} onChange={(e) => setF({ rank: e.target.value })} aria-label="Filter by rank">
+                  <option value="">All</option>{RANKS.map((x) => <option key={x} value={x}>{RANK_LABEL[x]}</option>)}
+                </select></th>
                 <th><select className="of-input of-sm" value={flt.gender} onChange={(e) => setF({ gender: e.target.value })} aria-label="Filter by gender">
                   <option value="">All</option><option value="f">♀ f</option><option value="m">♂ m</option><option value={NONE}>— not set</option>
                 </select></th>
@@ -148,8 +152,8 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
             )}
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td className="muted-sm" colSpan={8 + days.length}>No officials yet — import them via Players &amp; staff, or add one below.</td></tr>}
-            {rows.length > 0 && shown.length === 0 && <tr><td className="muted-sm" colSpan={8 + days.length}>No officials match the filters.</td></tr>}
+            {rows.length === 0 && <tr><td className="muted-sm" colSpan={9 + days.length}>No officials yet — import them via Players &amp; staff, or add one below.</td></tr>}
+            {rows.length > 0 && shown.length === 0 && <tr><td className="muted-sm" colSpan={9 + days.length}>No officials match the filters.</td></tr>}
             {shown.map((r0) => {
               const r = cur(r0);
               const roles = rolesOf(r);
@@ -159,6 +163,12 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                   <td><span className="of-roles">{OFFICIAL_ROLES.map((x) => (
                     <button key={x} className={`of-role ${roles.includes(x) ? "on" : ""}`} disabled={archived} title={ROLE_TITLE[x]} onClick={() => toggleRole(r0, x)}>{ROLE_LABEL[x]}</button>
                   ))}</span></td>
+                  <td>
+                    <select className="of-input of-sm" value={rankOf(r)} disabled={archived || !roles.includes("referee")} onChange={(e) => save(r0, { rank: e.target.value === "normal" ? "" : e.target.value }, 0)}
+                      aria-label="Rank" title={roles.includes("referee") ? undefined : "Only for referees"}>
+                      {RANKS.map((x) => <option key={x} value={x}>{RANK_LABEL[x]}</option>)}
+                    </select>
+                  </td>
                   <td>
                     <select className="of-input of-sm" value={r.gender || ""} disabled={archived} onChange={(e) => save(r0, { gender: e.target.value }, 0)} aria-label="Gender">
                       <option value="">—</option><option value="f">♀ f</option><option value="m">♂ m</option>

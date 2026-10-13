@@ -135,3 +135,32 @@ test("repair: moves a neutral referee over from a parallel game instead of leavi
   assert.ok(![rb.r1, rb.r2].includes("Vic Ref"));
   assert.deepEqual(res.unfilled.map((u) => u.slot), ["clerk", "clerk"]);
 });
+
+test("ranks: the top game gets a top Referee 1, top referees are kept off normal games", () => {
+  const top = ref("Tom", "Spain", { rank: "top" });
+  const offs = [ref("Ann", "Norway"), ref("Bob", "Chile"), ref("Cid", "Denmark"), top];
+  // Same start time: the normal game on court 1 is filled first.
+  const normal = game({ teamA: { name: "Italy" }, teamB: { name: "Austria" } });
+  const semi = game({ round: "Semifinal 1", court: 2 });
+  const res = autoAssign([normal, semi], offs, []);
+  assert.equal(at(res, semi).r1, "Tom Ref");
+  assert.ok(![at(res, normal).r1, at(res, normal).r2].includes("Tom Ref"));
+  assert.ok(!res.after.list.some((i) => i.code === "rank"));
+});
+
+test("ranks: a strong preference — beats a break, never a hard rule; falls back with a warning", () => {
+  const top = ref("Tom", "Spain", { rank: "top" });
+  const offs = [ref("Ann", "Norway"), ref("Bob", "Chile"), ref("Cid", "Denmark"), top];
+  // Tom is booked in the round before (locked) → R1 of the final means two in a row: still Tom.
+  const before = game({ time: "09:00", teamA: { name: "Italy" }, teamB: { name: "Austria" }, refs: { r1: "Tom Ref", r2: "Ann Ref" } });
+  const final = game({ round: "Gold medal match", time: "10:00" });
+  const res = autoAssign([before, final], offs, []);
+  assert.equal(at(res, final).r1, "Tom Ref");
+  // Tom from a playing nation (hard) → a normal referee instead, flagged.
+  const spanishFinal = game({ round: "Gold medal match", teamA: { name: "Spain" } });
+  const res2 = autoAssign([spanishFinal], offs, []);
+  const r = at(res2, spanishFinal);
+  assert.ok(r.r1 && r.r1 !== "Tom Ref" && r.r2 && r.r2 !== "Tom Ref");
+  assert.deepEqual(res2.after.list.filter((i) => i.code === "rank").map((i) => i.slot), ["r1"]);
+  assert.equal(res2.after.counts.hard, 0);
+});

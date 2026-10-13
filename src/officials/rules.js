@@ -11,7 +11,7 @@
 
 import {
   SLOT_ROLE, ROLE_LABEL, parseRoles, canFill, availabilityOn, availableAt, parseSlots,
-  teamMeta, sameCountry, sameClub, isWomenFinal,
+  teamMeta, sameCountry, sameClub, isWomenFinal, RANK_LABEL, rankOf, rankLevel, gameRank,
 } from "./model.js";
 
 export const SLOTS = ["r1", "r2", "clerk", "a1", "a2"];
@@ -51,8 +51,8 @@ export function checkAssignments(games, officials, entries, opts = {}) {
   const cells = {};
   const list = [];
   const refsOf = new Map(games.map((g) => [g.id, g.refs || {}]));
-  const add = (gameId, slot, level, code, msg) => {
-    const it = { gameId, slot, name: String(refsOf.get(gameId)?.[slot] ?? "").trim(), level, code, msg };
+  const add = (gameId, slot, level, code, msg, extra) => {
+    const it = { gameId, slot, name: String(refsOf.get(gameId)?.[slot] ?? "").trim(), level, code, msg, ...extra };
     ((cells[gameId] ||= {})[slot] ||= []).push(it);
     list.push(it);
   };
@@ -125,6 +125,12 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (club) {
         if (isRef) add(g.id, slot, "hard", "club", `Same club as a team (${o.club})`);
         else if (isAssistant) add(g.id, slot, "soft", "assistantClub", `Assistant from a playing club (${o.club})`);
+      }
+
+      // Rank: Referee 1 should have at least the game's rank (warning).
+      if (slot === "r1") {
+        const gap = rankLevel(gameRank(g)) - rankLevel(rankOf(o));
+        if (gap > 0) add(g.id, slot, "soft", "rank", `${RANK_LABEL[rankOf(o)]} referee in a ${RANK_LABEL[gameRank(g)].toLowerCase()} game`, { gap });
       }
     }
 
