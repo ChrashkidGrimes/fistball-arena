@@ -5,13 +5,13 @@ import { checkAssignments, isKnockout, cellLevel } from "./rules.js";
 // Small fixture: Germany, Austria, Brazil, Switzerland; officials by nation.
 const D = "12/09/26";
 const O = {
-  ger: { first: "Gerd", name: "Ger", country: "Germany", gender: "m", roles: ["SR"] },
-  aut: { first: "Anna", name: "Aut", country: "Austria", gender: "f", roles: ["SR"] },
-  sui: { first: "Sepp", name: "Sui", country: "Switzerland", gender: "m", roles: ["SR"] },
-  ita: { first: "Ida", name: "Ita", country: "Italy", gender: "f", roles: ["SR", "LR"] },
-  den: { first: "Dan", name: "Den", country: "Denmark", gender: "m", roles: ["SR"] },
-  lrGer: { first: "Lina", name: "Lr", country: "Germany", roles: ["LR"] },
-  asGer: { first: "Kurt", name: "Clerk", country: "Germany", club: "TV Brettorf", roles: ["AS"] },
+  ger: { first: "Gerd", name: "Ger", country: "Germany", gender: "m", roles: ["referee"] },
+  aut: { first: "Anna", name: "Aut", country: "Austria", gender: "f", roles: ["referee"] },
+  sui: { first: "Sepp", name: "Sui", country: "Switzerland", gender: "m", roles: ["referee"] },
+  ita: { first: "Ida", name: "Ita", country: "Italy", gender: "f", roles: ["referee", "assistant"] },
+  den: { first: "Dan", name: "Den", country: "Denmark", gender: "m", roles: ["referee"] },
+  lrGer: { first: "Lina", name: "Lr", country: "Germany", roles: ["assistant"] },
+  asGer: { first: "Kurt", name: "Clerk", country: "Germany", club: "TV Brettorf", roles: ["clerk"] },
 };
 const N = (o) => `${o.first} ${o.name}`;
 const officials = Object.values(O);
@@ -51,22 +51,22 @@ test("nation: irrelevant for scorer and line judges, warning for a referee on th
   const res = checkAssignments([g], officials, []);
   assert.deepEqual(codes(res, g, "clerk"), []);
   assert.deepEqual(codes(res, g, "a1"), []);
-  assert.deepEqual(codes(res, g, "a2"), ["soft:srLRNation"]);
+  assert.deepEqual(codes(res, g, "a2"), ["soft:refereeAsAssistantNation"]);
 });
 
 test("club: hard for referees, soft for line judges, irrelevant for the scorer", () => {
   const entries = [{ name: "TV Brettorf", club: "TV Brettorf", country: "Germany" }, { name: "Ahlhorn", club: "Ahlhorner SV", country: "Germany" }];
   const club = (first, roles) => ({ first, name: "X", club: "Ahlhorner SV", roles });
-  const ref = club("Ref", ["SR"]), lr = club("Line", ["LR"]), as = club("Clerk", ["AS"]);
+  const ref = club("Ref", ["referee"]), lr = club("Line", ["assistant"]), as = club("Clerk", ["clerk"]);
   const g = game({ teamA: { name: "TV Brettorf" }, teamB: { name: "Ahlhorn" }, refs: { r1: "Ref X", r2: N(O.sui), clerk: "Clerk X", a1: "Line X" } });
   const res = checkAssignments([g], [...officials, ref, lr, as], entries);
   assert.deepEqual(codes(res, g, "r1"), ["hard:club"]);
-  assert.deepEqual(codes(res, g, "a1"), ["soft:lrClub"]);
+  assert.deepEqual(codes(res, g, "a1"), ["soft:assistantClub"]);
   assert.deepEqual(codes(res, g, "clerk"), []);
 });
 
 test("availability: unavailable / outside time slots = hard, reserve = soft", () => {
-  const o = (status, slots) => ({ first: "Av", name: status + (slots ? "s" : ""), roles: ["SR"], availability: { [D]: { status, ...(slots ? { slots } : {}) } } });
+  const o = (status, slots) => ({ first: "Av", name: status + (slots ? "s" : ""), roles: ["referee"], availability: { [D]: { status, ...(slots ? { slots } : {}) } } });
   const away = o("unavailable"), res_ = o("reserve"), late = o("available", ["14:00"]);
   const g = game({ refs: { r1: N(away), r2: N(res_) } });
   const g2 = game({ time: "12:00", refs: { r1: N(late), r2: N(O.sui) } });
@@ -113,7 +113,7 @@ test("women's finals: one female referee required", () => {
   assert.deepEqual(codes(res, group, "r1"), []);
 });
 
-test("mandatory slots: r1/r2 always; LR / AS only when that pool exists", () => {
+test("mandatory slots: r1/r2 always; assistants / clerk only when that pool exists", () => {
   const g = game({ refs: {} });
   const noPools = officials.map((o) => ({ ...o, roles: undefined }));
   const res = checkAssignments([g], noPools, []);
@@ -138,7 +138,7 @@ test("games in a row: 2 = warning, 3 = hard; a free round resets", () => {
 });
 
 test("maxPerDay exceeded = warning on the extra games", () => {
-  const cap = { first: "Cap", name: "One", roles: ["SR"], maxPerDay: 1 };
+  const cap = { first: "Cap", name: "One", roles: ["referee"], maxPerDay: 1 };
   const g1 = game({ time: "09:00", refs: { r1: N(cap), r2: N(O.den) } });
   const g2 = game({ time: "15:00", refs: { r1: N(cap), r2: N(O.den) } });
   const res = checkAssignments([g1, g2], [...officials, cap], []);
@@ -146,10 +146,10 @@ test("maxPerDay exceeded = warning on the extra games", () => {
   assert.deepEqual(codes(res, g2, "r1"), ["soft:maxPerDay"]);
 });
 
-test("LR pair split = warning, unless the partner is away that day", () => {
-  const p1 = { first: "P", name: "One", roles: ["LR"], lrPair: "p" };
-  const p2 = { first: "P", name: "Two", roles: ["LR"], lrPair: "p" };
-  const solo = { first: "S", name: "Olo", roles: ["LR"] };
+test("assistant pair split = warning, unless the partner is away that day", () => {
+  const p1 = { first: "P", name: "One", roles: ["assistant"], assistantPair: "p" };
+  const p2 = { first: "P", name: "Two", roles: ["assistant"], assistantPair: "p" };
+  const solo = { first: "S", name: "Olo", roles: ["assistant"] };
   const g1 = game({ refs: { r1: N(O.sui), r2: N(O.den), a1: N(p1), a2: N(p2) } });
   const g2 = game({ time: "12:00", refs: { r1: N(O.sui), r2: N(O.den), a1: N(p1), a2: N(solo) } });
   const res = checkAssignments([g1, g2], [...officials, p1, p2, solo], []);

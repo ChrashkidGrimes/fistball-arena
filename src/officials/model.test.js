@@ -6,10 +6,10 @@ import {
 } from "./model.js";
 
 test("parseRoles: codes and words, canonical order, unknowns ignored", () => {
-  assert.deepEqual(parseRoles("LR, SR"), ["SR", "LR"]);
-  assert.deepEqual(parseRoles("Referee; Line judge / Scorer"), ["SR", "AS", "LR"]);
-  assert.deepEqual(parseRoles("Schiedsrichter/Anschreiber"), ["SR", "AS"]);
-  assert.deepEqual(parseRoles(["as", "lr"]), ["AS", "LR"]);
+  assert.deepEqual(parseRoles("LR, SR"), ["referee", "assistant"]);
+  assert.deepEqual(parseRoles("Referee; Line judge / Scorer"), ["referee", "clerk", "assistant"]);
+  assert.deepEqual(parseRoles("Schiedsrichter/Anschreiber"), ["referee", "clerk"]);
+  assert.deepEqual(parseRoles(["as", "lr"]), ["clerk", "assistant"]);
   assert.deepEqual(parseRoles("coach"), []);
   assert.deepEqual(parseRoles(""), []);
 });
@@ -22,9 +22,9 @@ test("parseGender", () => {
 });
 
 test("roles: missing roles = may fill any slot", () => {
-  assert.deepEqual(rolesOf({}), ["SR", "AS", "LR"]);
+  assert.deepEqual(rolesOf({}), ["referee", "clerk", "assistant"]);
   assert.equal(canFill({}, "a1"), true);
-  const lr = { roles: ["LR"] };
+  const lr = { roles: ["assistant"] };
   assert.equal(canFill(lr, "a2"), true);
   assert.equal(canFill(lr, "r1"), false);
   assert.equal(canFill(lr, "clerk"), false);
@@ -90,4 +90,10 @@ test("isWomenFinal: women's category and a finals round", () => {
   assert.equal(isWomenFinal({ category: "National Teams Women", round: "Gold medal match" }), true);
   assert.equal(isWomenFinal({ category: "National Teams Women", round: "Quarterfinal 1" }), false);
   assert.equal(isWomenFinal({ category: "National Teams Men", round: "Semifinal 1" }), false);
+});
+
+test("rolesOf reads roles saved with the old codes SR / AS / LR", () => {
+  assert.deepEqual(rolesOf({ roles: ["SR", "LR"] }), ["referee", "assistant"]);
+  assert.deepEqual(rolesOf({ roles: ["clerk"] }), ["clerk"]);
+  assert.deepEqual(rolesOf({}), ["referee", "clerk", "assistant"]);
 });

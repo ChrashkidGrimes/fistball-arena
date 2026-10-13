@@ -10,7 +10,7 @@
 // name-based checks (double booking, games in a row).
 
 import {
-  SLOT_ROLE, ROLE_LABEL, canFill, availabilityOn, availableAt, parseSlots,
+  SLOT_ROLE, ROLE_LABEL, parseRoles, canFill, availabilityOn, availableAt, parseSlots,
   teamMeta, sameCountry, sameClub, isWomenFinal,
 } from "./model.js";
 
@@ -36,7 +36,8 @@ export function isKnockout(game) {
   return !!r && !/qualif|group|gruppe|vorrunde|round.?robin/i.test(r);
 }
 
-const hasRole = (o, role) => Array.isArray(o?.roles) && o.roles.includes(role);
+// Explicitly given role (old SR / AS / LR codes are read too).
+const hasRole = (o, role) => Array.isArray(o?.roles) && parseRoles(o.roles).includes(role);
 // Explicit pools: does anyone in the registry carry this role?
 const poolHas = (officials, role) => officials.some((o) => hasRole(o, role));
 
@@ -44,8 +45,8 @@ export function checkAssignments(games, officials, entries, opts = {}) {
   const cfg = { ...DEFAULT_RULES, ...opts };
   const byName = new Map();
   for (const o of officials || []) { const k = norm(officialName(o)); if (k && !byName.has(k)) byName.set(k, o); }
-  const lrPool = poolHas(officials || [], "LR");
-  const asPool = poolHas(officials || [], "AS");
+  const assistantPool = poolHas(officials || [], "assistant");
+  const clerkPool = poolHas(officials || [], "clerk");
 
   const cells = {};
   const list = [];
@@ -82,14 +83,14 @@ export function checkAssignments(games, officials, entries, opts = {}) {
     for (const slot of SLOTS) {
       const raw = String(refs[slot] ?? "").trim();
       if (!raw) {
-        const mandatory = slot === "r1" || slot === "r2" || ((slot === "a1" || slot === "a2") && lrPool) || (slot === "clerk" && asPool);
+        const mandatory = slot === "r1" || slot === "r2" || ((slot === "a1" || slot === "a2") && assistantPool) || (slot === "clerk" && clerkPool);
         if (mandatory) add(g.id, slot, "hard", "missing", `${SLOT_LABEL[slot]} is required`);
         continue;
       }
       const k = norm(raw);
       const o = byName.get(k);
       const isRef = slot === "r1" || slot === "r2";
-      const isLR = slot === "a1" || slot === "a2";
+      const isAssistant = slot === "a1" || slot === "a2";
 
       // 4. Double booking — twice in this game, or another game at the same start time.
       const twice = SLOTS.filter((s) => s !== slot && norm(refs[s]) === k);
@@ -100,7 +101,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (!o) continue; // not in the registry → nothing else to check
 
       // 5. Role not allowed (only when roles are set).
-      if (!canFill(o, slot)) add(g.id, slot, "hard", "role", `Not allowed as ${ROLE_LABEL[SLOT_ROLE[slot]].toLowerCase()} (roles: ${o.roles.map((x) => ROLE_LABEL[x] || x).join(", ")})`);
+      if (!canFill(o, slot)) add(g.id, slot, "hard", "role", `Not allowed as ${ROLE_LABEL[SLOT_ROLE[slot]].toLowerCase()} (roles: ${parseRoles(o.roles).map((x) => ROLE_LABEL[x]).join(", ")})`);
 
       // 3. Availability.
       const av = availabilityOn(o, g.date);
@@ -116,14 +117,14 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (nation) {
         if (slot === "r1" || (slot === "r2" && !ko)) add(g.id, slot, "hard", "nation", `Same nation as a team (${o.country})`);
         else if (slot === "r2") add(g.id, slot, "soft", "r2Nation", `Same nation as a team (${o.country}) — only if no neutral referee is available`);
-        else if (isLR && hasRole(o, "SR")) add(g.id, slot, "soft", "srLRNation", `Referee as assistant for own nation (${o.country})`);
+        else if (isAssistant && hasRole(o, "referee")) add(g.id, slot, "soft", "refereeAsAssistantNation", `Referee as assistant for own nation (${o.country})`);
       }
 
       // 2. Club: hard for referees, warning for line judges, irrelevant for the scorer.
       const club = o.club && [metaA.club, metaB.club].find((c) => sameClub(o.club, c));
       if (club) {
         if (isRef) add(g.id, slot, "hard", "club", `Same club as a team (${o.club})`);
-        else if (isLR) add(g.id, slot, "soft", "lrClub", `Assistant from a playing club (${o.club})`);
+        else if (isAssistant) add(g.id, slot, "soft", "assistantClub", `Assistant from a playing club (${o.club})`);
       }
     }
 
@@ -139,12 +140,12 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       }
     }
 
-    // 3.4 LR pair split: a1 and a2 should be the same pair, unless the partner
+    // 3.4 Assistant pair split: a1 and a2 should be the same pair, unless the partner
     // is unavailable that day (the pair dissolves for the day).
     const [l1, l2] = ["a1", "a2"].map((s) => byName.get(norm(refs[s])));
     for (const [s, me, other] of [["a1", l1, l2], ["a2", l2, l1]]) {
-      if (!me?.lrPair || other?.lrPair === me.lrPair) continue;
-      const partner = (officials || []).find((p) => p !== me && p.lrPair === me.lrPair);
+      if (!me?.assistantPair || other?.assistantPair === me.assistantPair) continue;
+      const partner = (officials || []).find((p) => p !== me && p.assistantPair === me.assistantPair);
       if (partner && availabilityOn(partner, g.date).status !== "unavailable") {
         add(g.id, s, "soft", "pairSplit", `Assistant partner ${officialName(partner)} is not on the other line`);
       }
