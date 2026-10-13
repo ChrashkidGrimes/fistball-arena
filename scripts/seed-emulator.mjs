@@ -72,19 +72,19 @@ function squad(teamIdx, women) {
 // officials fields from src/officials/model.js (older app versions ignore them).
 const official = (role, roles) => ([name, first, country, gender, assistantPair]) =>
   ({ name, first, role, roles, country, gender, ...(assistantPair ? { assistantPair } : {}), photo: "", birthday: "" });
-// Uniforms: two kits per team (shirt + shorts; only shirts count for clashes)
+// Uniforms: two shirt colours per team
 // and the event's referee shirt colours. Several teams share red / white, so
 // "all in Uniform 1" clashes and "Suggest uniforms" has something to solve;
 // every pairing (incl. knockout) is solvable, each with a fitting referee shirt.
 const WHITE = "#ffffff", BLACK = "#1a1a1a", RED = "#e23b3b", YELLOW = "#f2c20a", BLUE = "#2f6df0";
-const kits = (s1, h1, s2, h2) => [{ shirt: s1, shorts: h1 }, { shirt: s2, shorts: h2 }];
+const kits = (s1, s2) => [{ shirt: s1 }, { shirt: s2 }];
 const TEAM_KITS = {
-  Germany: kits(WHITE, BLACK, BLACK, WHITE),
-  Austria: kits(RED, WHITE, WHITE, RED),
-  Switzerland: kits(RED, RED, WHITE, WHITE),
-  Brazil: kits(YELLOW, BLUE, BLUE, WHITE),
-  Italy: kits(BLUE, WHITE, WHITE, BLUE),
-  Chile: kits(RED, BLUE, WHITE, BLUE),
+  Germany: kits(WHITE, BLACK),
+  Austria: kits(RED, WHITE),
+  Switzerland: kits(RED, WHITE),
+  Brazil: kits(YELLOW, BLUE),
+  Italy: kits(BLUE, WHITE),
+  Chile: kits(RED, WHITE),
 };
 const REF_KITS = [
   { id: "ref-mint", name: "Mint green", shirt: "#3eb489" },
