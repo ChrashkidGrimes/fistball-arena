@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { suggestKits, checkKits, countChanges } from "../officials/kits.js";
+import { suggestKits, checkKits, countChanges, tid, kitsByTeam } from "../officials/kits.js";
 import { resolveKit } from "../kits.js";
 import { KitSwatch } from "../KitSwatch.jsx";
 
@@ -33,6 +33,7 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
     catch (e) { alert("Could not save: " + (e?.code || e?.message || e)); setBusy(false); }
   };
 
+  const kitsOf = kitsByTeam(games, teamKits); // team · category → its uniforms
   // Per day → team: the sequence of uniforms over its games, marking changed cells.
   const view = (() => {
     if (!res) return [];
@@ -43,8 +44,8 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
       const teams = new Map();
       for (const g of res.games.filter((x) => x.date === d)) {
         for (const side of ["A", "B"]) {
-          const t = side === "A" ? g.teamA?.name : g.teamB?.name;
-          if (!t || !teamKits[t]) continue;
+          const t = tid(g, side); // team · category
+          if (!t || !kitsOf[t]) continue;
           if (!teams.has(t)) teams.set(t, []);
           teams.get(t).push({ g, v: g.kit?.[side], changed: changed.has(g.id + side) });
         }
@@ -101,7 +102,7 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
                         <td>{shortTeam(t)}</td>
                         <td className="sk-seq">{xs.map(({ g, v, changed }) => (
                           <span key={g.id} className={`sk-item ${changed ? "sk-new" : ""}`} title={`#${g.nr} ${g.time}${changed ? " — new" : ""}`}>
-                            <span className="muted-sm">#{g.nr}</span> <KitSwatch kit={resolveKit(v, teamKits[t])} size={14} /> {typeof v === "number" ? v : "—"}
+                            <span className="muted-sm">#{g.nr}</span> <KitSwatch kit={resolveKit(v, kitsOf[t])} size={14} /> {typeof v === "number" ? v : "—"}
                           </span>
                         ))}</td>
                       </tr>

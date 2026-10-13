@@ -107,3 +107,17 @@ test("teams without kits are left alone", () => {
   const res = suggestKits([g], tk);
   assert.deepEqual(kitOf(res, g), { A: 1 });
 });
+
+test("uniforms per team AND category: a club's men's and women's teams are separate; name-only kits still work", () => {
+  // Club X: men in red, women in white. Opponents: Y (men) white, Z (women) red.
+  const tk = { "X · Men": [kit(RED), kit(BLUE)], "X · Women": [kit(WHITE), kit(BLUE)], Y: [kit(WHITE), kit(BLACK)], "Z · Women": [kit(RED), kit(NAVY)] };
+  const men = game("X", "Y", D1, "10:00", { category: "Men", kit: { A: 1, B: 1 } });
+  const women = game("X", "Z", D1, "11:00", { category: "Women", kit: { A: 1, B: 1 } });
+  assert.deepEqual(checkKits([men, women], tk), {}); // red v white, white v red — no clash
+  // Women in the men's colours would clash with Z: the check uses the category's kits.
+  const tk2 = { ...tk, "X · Women": [kit(RED), kit(BLUE)] };
+  assert.deepEqual(Object.keys(checkKits([men, women], tk2)), [women.id]);
+  const res = suggestKits([men, women], tk2, { overwrite: true });
+  assert.deepEqual(res.clashes, []);
+  assert.deepEqual(Object.keys(res.changes), []); // the men's and women's X are not one team switching kits
+});

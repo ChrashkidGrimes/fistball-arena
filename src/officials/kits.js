@@ -6,7 +6,7 @@
 // suggestKits(games, teamKits, opts) → {
 //   proposals: [{ gameId, side: "A"|"B", from, to }],
 //   games,            // games with the proposal applied
-//   changes: { [team]: { [date]: n } },   // kit changes per team and day
+//   changes: { [team · category]: { [date]: n } },   // kit changes per team and day
 //   unresolvable: [gameId], clashes: [gameId]  // after the proposal
 // }
 // Per day (chronological, so the previous day's kit is known), per connected
@@ -18,7 +18,7 @@
 // Objectives (lexicographic): no clash › fewest changes › wear the OTHER kit
 // than the previous day › Uniform 1.
 
-import { resolveKit } from "../kits.js";
+import { resolveKit, kitKey, teamKitsFor } from "../kits.js";
 import { parseSlots } from "./model.js";
 
 export const DEFAULT_KIT_RULES = { threshold: 35, maxExhaustive: 16 };
@@ -50,6 +50,18 @@ export function deltaE(a, b) {
 
 /* ---------- helpers ---------- */
 const name = (t) => String(t?.name ?? t ?? "");
+// Uniforms are registered per team AND category (a club's men's and women's
+// teams have their own, see src/kits.js), so a "team" here is that pair:
+// tid() is its id, kitsByTeam() maps each id of the games to its kits.
+export const tid = (g, side) => { const n = name(side === "A" ? g.teamA : g.teamB); return n && g.category ? kitKey(n, g.category) : n; };
+export function kitsByTeam(games, teamKits) {
+  const out = {};
+  for (const g of games) for (const side of ["A", "B"]) {
+    const n = name(side === "A" ? g.teamA : g.teamB), k = n && teamKitsFor(teamKits, n, g.category);
+    if (k) out[tid(g, side)] = k;
+  }
+  return out;
+}
 const timeKey = (t) => parseSlots(t)[0] || String(t ?? "").trim();
 const dateNum = (s) => { const [d, m, y] = String(s).split("/").map(Number); return (y || 0) * 10000 + (m || 0) * 100 + (d || 0); };
 const byTime = (a, b) => dateNum(a.date) - dateNum(b.date) || timeKey(a.time).localeCompare(timeKey(b.time)) || (a.nr || 0) - (b.nr || 0);
@@ -66,10 +78,11 @@ function resolvable(kitsA, kitsB, th, optsA = kitNumbers(kitsA), optsB = kitNumb
 // Status of each game's CURRENT kits, for the badges on the Uniforms page:
 // { [gameId]: { level: "clash" | "unresolvable", msg } } (only games with an issue).
 export function checkKits(games, teamKits, opts = {}) {
+  teamKits = kitsByTeam(games, teamKits);
   const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
   const out = {};
   for (const g of games) {
-    const kA = teamKits[name(g.teamA)], kB = teamKits[name(g.teamB)];
+    const kA = teamKits[tid(g, "A")], kB = teamKits[tid(g, "B")];
     const vA = g.kit?.A, vB = g.kit?.B;
     if (!resolvable(kA, kB, th)) { out[g.id] = { level: "unresolvable", msg: "Every uniform combination of these teams clashes" }; continue; }
     const sA = shirtOf(vA, kA), sB = shirtOf(vB, kB);
@@ -86,7 +99,7 @@ export function countChanges(games) {
   const last = new Map(), out = {};
   for (const g of [...games].sort(byTime)) {
     for (const side of ["A", "B"]) {
-      const t = name(side === "A" ? g.teamA : g.teamB), v = g.kit?.[side];
+      const t = tid(g, side), v = g.kit?.[side];
       if (!t || !v) continue;
       const k = t + "|" + g.date;
       if (last.has(k) && last.get(k) !== v) ((out[t] ||= {})[g.date] = (out[t][g.date] || 0) + 1);
@@ -100,7 +113,7 @@ export function countChanges(games) {
 function dayKitOf(team, dayGames) {
   const cnt = {}; let lastV = null;
   for (const g of dayGames) {
-    const side = name(g.teamA) === team ? "A" : name(g.teamB) === team ? "B" : null;
+    const side = tid(g, "A") === team ? "A" : tid(g, "B") === team ? "B" : null;
     const v = side && g.kit?.[side];
     if (typeof v !== "number") continue;
     cnt[v] = (cnt[v] || 0) + 1; lastV = v;
@@ -117,6 +130,7 @@ const add = (a, b) => a.map((x, i) => x + b[i]);
 const less = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]; return false; };
 
 export function suggestKits(games, teamKits, opts = {}) {
+  teamKits = kitsByTeam(games, teamKits);
   const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
   const maxEx = opts.maxExhaustive ?? DEFAULT_KIT_RULES.maxExhaustive;
   const inScope = (g) => !opts.days?.length || opts.days.includes(g.date);
@@ -128,7 +142,7 @@ export function suggestKits(games, teamKits, opts = {}) {
     const dayGames = work.filter((g) => g.date === date);
     if (dayGames.some(inScope)) solveDay(dayGames.filter(inScope));
     // Remember today's kit per team for tomorrow's alternation.
-    for (const t of new Set(dayGames.flatMap((g) => [name(g.teamA), name(g.teamB)]))) {
+    for (const t of new Set(dayGames.flatMap((g) => [tid(g, "A"), tid(g, "B")]))) {
       const k = dayKitOf(t, dayGames);
       if (k) prevKit.set(t, k);
     }
@@ -145,7 +159,7 @@ export function suggestKits(games, teamKits, opts = {}) {
     // Connected components over teams that have kits.
     const parent = new Map();
     const find = (x) => { while (parent.get(x) !== x) x = parent.get(x); return x; };
-    const teamsOf = (g) => [name(g.teamA), name(g.teamB)].filter((t) => kitNumbers(teamKits[t]).length);
+    const teamsOf = (g) => [tid(g, "A"), tid(g, "B")].filter((t) => kitNumbers(teamKits[t]).length);
     for (const g of dayGames) for (const t of teamsOf(g)) if (!parent.has(t)) parent.set(t, t);
     for (const g of dayGames) { const ts = teamsOf(g); if (ts.length === 2) parent.set(find(ts[0]), find(ts[1])); }
     const comps = new Map();
@@ -153,7 +167,7 @@ export function suggestKits(games, teamKits, opts = {}) {
 
     for (const teams of comps.values()) {
       const tset = new Set(teams);
-      const cg = dayGames.filter((g) => tset.has(name(g.teamA)) || tset.has(name(g.teamB)));
+      const cg = dayGames.filter((g) => tset.has(tid(g, "A")) || tset.has(tid(g, "B")));
       solveComponent(teams, cg, lockedOf);
     }
   }
@@ -164,11 +178,11 @@ export function suggestKits(games, teamKits, opts = {}) {
     const vars = teams.filter((t) => opts1.get(t).length === 2).sort();
     const vi = new Map(vars.map((t, i) => [t, i]));
     const kitIn = (t, state) => (vi.has(t) ? ((state >> vi.get(t)) & 1) + 1 : opts1.get(t)[0]);
-    const unres = new Set(cg.filter((g) => !resolvable(teamKits[name(g.teamA)], teamKits[name(g.teamB)], th)).map((g) => g.id));
+    const unres = new Set(cg.filter((g) => !resolvable(teamKits[tid(g, "A")], teamKits[tid(g, "B")], th)).map((g) => g.id));
 
     // Value worn by a side in a game for a given state (locked sides win).
     const sideVal = (g, side, state) => {
-      const t = name(side === "A" ? g.teamA : g.teamB);
+      const t = tid(g, side);
       const lk = lockedOf(g, side);
       if (lk === "legacy") return g.kit[side];
       if (!opts1.get(t)?.length) return null; // team without kits
@@ -178,10 +192,10 @@ export function suggestKits(games, teamKits, opts = {}) {
     const gameCost = (g, state) => {
       const c = [...ZERO];
       for (const side of ["A", "B"]) {
-        const lk = lockedOf(g, side), t = name(side === "A" ? g.teamA : g.teamB);
+        const lk = lockedOf(g, side), t = tid(g, side);
         if (typeof lk === "number" && opts1.get(t)?.length && kitIn(t, state) !== lk) return null;
       }
-      const tA = name(g.teamA), tB = name(g.teamB);
+      const tA = tid(g, "A"), tB = tid(g, "B");
       const vA = sideVal(g, "A", state), vB = sideVal(g, "B", state);
       if (vA && vB && !unres.has(g.id) && deltaE(shirtOf(vA, teamKits[tA]), shirtOf(vB, teamKits[tB])) < th) c[0]++;
       for (const [t, v] of [[tA, vA], [tB, vB]]) {
@@ -193,7 +207,7 @@ export function suggestKits(games, teamKits, opts = {}) {
     };
     const assign = (g, stateOf) => {
       for (const side of ["A", "B"]) {
-        const t = name(side === "A" ? g.teamA : g.teamB);
+        const t = tid(g, side);
         if (lockedOf(g, side) !== null || !opts1.get(t)?.length) continue;
         g.kit[side] = kitIn(t, stateOf(g));
       }
@@ -259,7 +273,7 @@ export function suggestKits(games, teamKits, opts = {}) {
     // game would clash.
     const cur = new Map(teams.map((t) => [t, prevKit.has(t) && opts1.get(t).length === 2 ? 3 - prevKit.get(t) : opts1.get(t)[0]]));
     for (const g of [...cg].sort(byTime)) {
-      const tA = name(g.teamA), tB = name(g.teamB);
+      const tA = tid(g, "A"), tB = tid(g, "B");
       for (const [t, side] of [[tA, "A"], [tB, "B"]]) { const lk = lockedOf(g, side); if (typeof lk === "number" && cur.has(t)) cur.set(t, lk); }
       const shirt = (t, side) => (lockedOf(g, side) === "legacy" ? g.kit[side] : cur.has(t) ? teamKits[t][cur.get(t) - 1]?.shirt : "");
       if (!unres.has(g.id) && deltaE(shirt(tA, "A"), shirt(tB, "B")) < th) {

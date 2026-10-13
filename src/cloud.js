@@ -302,7 +302,7 @@ export async function setTeamLogo(teamName, dataUrl) {
 }
 
 /* ----------------- team kits (uniforms) ----------------- */
-// One public doc per event: { eventId, kits: { [teamName]: [{shirt, shorts}, {shirt, shorts}] } }
+// One public doc per event: { eventId, kits: { [kitKey(team, category)]: [{shirt, shorts}, {shirt, shorts}] } }
 // — up to two uniforms per team. Games pick one by number (see saveGameKit);
 // public so Fistball Live can show which uniform each team wears.
 const teamKitsRef = (eid) => doc(db, "public", `teamkits_${eid}`);
@@ -311,9 +311,9 @@ export function subscribeTeamKits(cb) {
     (d) => cb(d.exists() ? d.data().kits || {} : {}),
     (err) => { console.warn("team kits unavailable:", err?.code || err); cb({}); });
 }
-export async function setTeamKits(teamName, kits) {
+export async function setTeamKits(key, kits) {
   const eid = reqEid();
-  await setDoc(teamKitsRef(eid), { eventId: eid, kits: { [teamName]: kits } }, { merge: true });
+  await setDoc(teamKitsRef(eid), { eventId: eid, kits: { [key]: kits } }, { merge: true });
 }
 
 /* ----------------- logo library + event branding ----------------- */
