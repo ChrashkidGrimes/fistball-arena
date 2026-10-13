@@ -34,8 +34,6 @@ export default function Referees() {
   useEffect(() => subscribeReferees(setRefs), []);
 
   const sortedRefs = useMemo(() => [...refs].sort((a, b) => refName(a).localeCompare(refName(b))), [refs]);
-  // Flag of an official's nation, by the name typed in a cell.
-  const flagByName = useMemo(() => new Map(refs.map((r) => [refName(r).toLowerCase(), flagFor(r.country)])), [refs]);
   const teamNations = useMemo(() => [...new Set((event?.entries || []).map((e) => teamMeta(event.entries, e.name).country).filter(Boolean))].sort(), [event]);
   const days = useMemo(() => [...new Set(games.map((g) => g.date))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
   // Rule checks over ALL games (games in a row / double booking span the day),
@@ -181,7 +179,6 @@ export default function Referees() {
                   const empty = !String(valOf(g, k)).trim();
                   return (
                     <td key={k} className={`ag-cell ${lvl ? `rg-${empty ? "missing" : lvl}` : ""}`} title={iss ? iss.map((i) => (i.level === "hard" ? "⛔ " : "⚠ ") + i.msg).join("\n") : undefined}>
-                      <span className="flag">{flagByName.get(String(valOf(g, k)).trim().toLowerCase()) || ""}</span>
                       {officialPicker(g, k, empty && lvl ? "required" : "—")}
                       {lvl && !empty && <span className={`rg-badge rg-badge-${lvl}`}>{iss.length > 1 ? iss.length : "!"}</span>}
                     </td>
