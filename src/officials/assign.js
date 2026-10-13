@@ -47,6 +47,7 @@ export const DEFAULT_WEIGHTS = {
   refereeAsAssistantNation: 100,
   soloAssistant: 60,       // a line judge not working with their pair partner
   genderUnknown: 50,
+  cmRound: 5000,    // a second court manager in the same round (one per round covers all courts)
   load: 10,         // per game already worked (balances the load)
   gender: 8,        // bonus: female referee on a women's game
   repeat: 3,        // per earlier game with one of these teams
@@ -124,16 +125,18 @@ export function autoAssign(games, officials, entries, opts = {}) {
   const roundOf = (g) => roundIdx.get(g.date).get(timeKey(g.time));
 
   // Per person state, seeded from cells that are already filled.
-  // Court manager duty is kept apart (cm: Set(date|time), cmDay): it may run
-  // on several courts at once and doesn't count for load, breaks or maxPerDay.
-  const st = new Map(); // key → { total, day: {date: n}, rounds: {date: Set}, booked: Set(date|time), teams: Map, cm, cmDay }
+  // Court manager duty is kept apart (cm: Set(date|time)): one court manager
+  // looks after all courts of a round, and the duty doesn't count for load,
+  // breaks or maxPerDay of the other roles.
+  const st = new Map(); // key → { total, day: {date: n}, rounds: {date: Set}, booked: Set(date|time), teams: Map, cm: Set(date|time) }
   const S = (k) => {
-    if (!st.has(k)) st.set(k, { total: 0, day: {}, rounds: {}, booked: new Set(), teams: new Map(), cm: new Set(), cmDay: {} });
+    if (!st.has(k)) st.set(k, { total: 0, day: {}, rounds: {}, booked: new Set(), teams: new Map(), cm: new Set() });
     return st.get(k);
   };
+  const cmRounds = (k, date) => [...S(k).cm].filter((x) => x.startsWith(date + "|")).length;
   const book = (k, g, slot) => {
     const p = S(k);
-    if (slot === "cm") { p.cm.add(g.date + "|" + timeKey(g.time)); p.cmDay[g.date] = (p.cmDay[g.date] || 0) + 1; return; }
+    if (slot === "cm") { p.cm.add(g.date + "|" + timeKey(g.time)); return; }
     p.total++;
     p.day[g.date] = (p.day[g.date] || 0) + 1;
     (p.rounds[g.date] ||= new Set()).add(roundOf(g));
@@ -169,9 +172,11 @@ export function autoAssign(games, officials, entries, opts = {}) {
     if (SLOTS.some((s) => norm(g.refs[s]) === k)) return null;
     if (S(k).booked.has(g.date + "|" + timeKey(g.time))) return null;
     if (slot === "cm") {
-      // Court manager: role, availability and no other duty at this time;
-      // other courts at the same time are fine. Spread the duty evenly.
-      let c = w.load * (S(k).cmDay[g.date] || 0);
+      // Court manager: role, availability and no other duty at this time.
+      // One per round: whoever already manages a court in this round takes
+      // this one too; otherwise spread the rounds evenly.
+      if (S(k).cm.has(g.date + "|" + timeKey(g.time))) return 0;
+      let c = w.cmRound + w.load * cmRounds(k, g.date);
       if (availabilityOn(o, g.date).status === "reserve") c += w.reserve;
       return c;
     }
