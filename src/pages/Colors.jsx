@@ -16,6 +16,8 @@ const PALETTE = [
 ];
 const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); return new Date(2000 + (y || 0), (m || 1) - 1, d || 1); };
 const dayLabel = (s) => { const dt = parseDate(s); return `${dt.toLocaleDateString("en-US", { weekday: "short" })} ${dt.getDate()} ${dt.toLocaleDateString("en-US", { month: "short" })}`; };
+// Women's categories say so in their name ("Clubs U18 Women", "Damen"…).
+const isWomen = (cat) => /\b(women|woman|female|ladies|damen|frauen|feminino|femenino|mujeres)\b/i.test(String(cat || ""));
 const shortTeam = (t) => String(t?.name || t || "").split(" - ")[0];
 
 function ColorPick({ value, disabled, onPick, what = "shirt" }) {
@@ -65,13 +67,15 @@ export default function Colors() {
   useEffect(() => subscribeTeamKits(setTeamKitsState), []);
 
   const days = useMemo(() => [...new Set(games.map((g) => g.date).filter(Boolean))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
-  // One row per team per category (Settings → Teams); falls back to the
-  // team/category pairs on the games.
+  // One row per team per category it actually plays in this event (from the
+  // games; knockout placeholders like "Winner SF1" are skipped when the event
+  // has registered teams). Before any games exist, falls back to Settings → Teams.
   const teams = useMemo(() => {
+    const registered = new Set((event?.entries || []).map((t) => t?.name).filter(Boolean));
     const pairs = [];
-    for (const t of event?.entries || []) if (t?.name) for (const cat of (t.cats?.length ? t.cats : [""])) pairs.push([t.name, cat]);
-    if (!pairs.length) for (const g of games) for (const n of [g.teamA?.name, g.teamB?.name]) if (n) pairs.push([n, g.category || ""]);
-    const m = new Map(pairs.map(([name, category]) => [kitKey(name, category), { key: kitKey(name, category), name, category }]));
+    for (const g of games) for (const n of [g.teamA?.name, g.teamB?.name]) if (n && (!registered.size || registered.has(n))) pairs.push([n, g.category || ""]);
+    if (!pairs.length) for (const t of event?.entries || []) if (t?.name) for (const cat of (t.cats?.length ? t.cats : [""])) pairs.push([t.name, cat]);
+    const m = new Map(pairs.map(([name, category]) => [kitKey(name, category), { key: kitKey(name, category), name, category, women: isWomen(category) }]));
     return [...m.values()].sort((a, b) => a.name.localeCompare(b.name) || a.category.localeCompare(b.category));
   }, [event, games]);
   const teamByKey = useMemo(() => new Map(teams.map((t) => [t.key, t])), [teams]);
@@ -110,6 +114,18 @@ export default function Colors() {
     } catch (e) { fail(e); }
   };
 
+  const teamRow = (t) => (
+    <tr key={t.key}>
+      <td className="clr-cell"><span className="flag">{flagFor(t.name)}</span>{shortTeam({ name: t.name })}{t.category && <span className="muted-sm"> · {t.category}</span>}</td>
+      {[1, 2].map((n) => (
+        <td key={n} className="clr-cell">
+          <ColorPick what="shirt" value={teamKitsFor(teamKits, t.name, t.category)?.[n - 1]?.shirt || ""} disabled={archived} onPick={(c) => setTeamColor(t, n, "shirt", c)} />
+          <ColorPick what="shorts" value={teamKitsFor(teamKits, t.name, t.category)?.[n - 1]?.shorts || ""} disabled={archived} onPick={(c) => setTeamColor(t, n, "shorts", c)} />
+        </td>
+      ))}
+    </tr>
+  );
+
   const kitSelect = (g, side) => {
     const team = side === "A" ? g.teamA?.name : g.teamB?.name;
     const v = g.kit?.[side];
@@ -140,17 +156,10 @@ export default function Colors() {
             <thead><tr><th className="rg-game">Team</th><th>Uniform 1 (shirt · shorts)</th><th>Uniform 2 (shirt · shorts)</th></tr></thead>
             <tbody>
               {teams.length === 0 && <tr><td className="muted-sm" colSpan={3}>No teams yet — add them in Settings → Teams.</td></tr>}
-              {teams.map((t) => (
-                <tr key={t.key}>
-                  <td className="clr-cell"><span className="flag">{flagFor(t.name)}</span>{shortTeam({ name: t.name })}{t.category && <span className="muted-sm"> · {t.category}</span>}</td>
-                  {[1, 2].map((n) => (
-                    <td key={n} className="clr-cell">
-                      <ColorPick what="shirt" value={teamKitsFor(teamKits, t.name, t.category)?.[n - 1]?.shirt || ""} disabled={archived} onPick={(c) => setTeamColor(t, n, "shirt", c)} />
-                      <ColorPick what="shorts" value={teamKitsFor(teamKits, t.name, t.category)?.[n - 1]?.shorts || ""} disabled={archived} onPick={(c) => setTeamColor(t, n, "shorts", c)} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {[["Men", false], ["Women", true]].flatMap(([label, women]) => {
+                const list = teams.filter((t) => t.women === women);
+                return list.length ? [<tr key={label} className="kit-sec"><th colSpan={3}>{label}</th></tr>, ...list.map(teamRow)] : [];
+              })}
             </tbody>
           </table>
         </div>
@@ -162,7 +171,11 @@ export default function Colors() {
             <span className="muted-sm">Uniform of the day:</span>
             <select className="ag-role" value={bulk.team} onChange={(e) => setBulk({ ...bulk, team: e.target.value })}>
               <option value="">— team —</option>
-              {teams.map((t) => <option key={t.key} value={t.key}>{rowLabel(t)}</option>)}
+              {[["Men", false], ["Women", true]].map(([label, women]) => (
+                <optgroup key={label} label={label}>
+                  {teams.filter((t) => t.women === women).map((t) => <option key={t.key} value={t.key}>{rowLabel(t)}</option>)}
+                </optgroup>
+              ))}
             </select>
             <select className="ag-role" value={bulk.date} onChange={(e) => setBulk({ ...bulk, date: e.target.value })}>
               <option value="">— day —</option>
