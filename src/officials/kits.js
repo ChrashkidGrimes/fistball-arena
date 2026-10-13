@@ -15,8 +15,10 @@
 //      (exhaustive over the teams with two kits);
 //   2. otherwise the fewest kit changes: DP over the day's time slots, state =
 //      every team's current kit.
-// Objectives (lexicographic): no clash › fewest changes › wear the OTHER kit
-// than the previous day › Uniform 1.
+// Objectives (lexicographic): no clash › fewest changes › a referee shirt
+// (opts.refKits) contrasts with both teams › wear the OTHER kit than the
+// previous day › Uniform 1. The referee-shirt objective never costs a kit
+// change, it only overrides the alternation / Uniform 1 preferences.
 
 import { resolveKit } from "../kits.js";
 import { parseSlots } from "./model.js";
@@ -111,14 +113,17 @@ function dayKitOf(team, dayGames) {
   return tied.includes(lastV) ? lastV : tied[0];
 }
 
-// Lexicographic cost tuples: [clashes, changes, sameAsPrevDay, uniform2].
-const ZERO = [0, 0, 0, 0];
+// Lexicographic cost tuples: [clashes, changes, noRefShirt, sameAsPrevDay, uniform2].
+const ZERO = [0, 0, 0, 0, 0];
 const add = (a, b) => a.map((x, i) => x + b[i]);
 const less = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]; return false; };
 
 export function suggestKits(games, teamKits, opts = {}) {
   const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
   const maxEx = opts.maxExhaustive ?? DEFAULT_KIT_RULES.maxExhaustive;
+  const refList = usable(opts.refKits);
+  // Does some referee shirt colour contrast with both team shirts?
+  const refFits = (sA, sB) => !refList.length || refList.some((r) => deltaE(r.shirt, sA) >= th && deltaE(r.shirt, sB) >= th);
   const inScope = (g) => !opts.days?.length || opts.days.includes(g.date);
   const work = [...games].sort(byTime).map((g) => ({ ...g, kit: { ...(g.kit || {}) } }));
   const days = [...new Set(work.map((g) => g.date))].sort((a, b) => dateNum(a) - dateNum(b));
@@ -183,11 +188,15 @@ export function suggestKits(games, teamKits, opts = {}) {
       }
       const tA = name(g.teamA), tB = name(g.teamB);
       const vA = sideVal(g, "A", state), vB = sideVal(g, "B", state);
-      if (vA && vB && !unres.has(g.id) && deltaE(shirtOf(vA, teamKits[tA]), shirtOf(vB, teamKits[tB])) < th) c[0]++;
+      if (vA && vB) {
+        const sA = shirtOf(vA, teamKits[tA]), sB = shirtOf(vB, teamKits[tB]);
+        if (!unres.has(g.id) && deltaE(sA, sB) < th) c[0]++;
+        if (sA && sB && !refFits(sA, sB)) c[2]++;
+      }
       for (const [t, v] of [[tA, vA], [tB, vB]]) {
         if (typeof v !== "number" || !vi.has(t)) continue;
-        if (prevKit.has(t) && prevKit.get(t) === v) c[2]++;
-        if (v === 2) c[3]++;
+        if (prevKit.has(t) && prevKit.get(t) === v) c[3]++;
+        if (v === 2) c[4]++;
       }
       return c;
     };
@@ -226,7 +235,7 @@ export function suggestKits(games, teamKits, opts = {}) {
           for (let s = 0; s < N; s++) {
             const o = s ^ (1 << i);
             if (!d[o]) continue;
-            const cand = add(d[o], [0, 1, 0, 0]);
+            const cand = add(d[o], [0, 1, 0, 0, 0]);
             if (!d[s] || less(cand, d[s])) { d[s] = cand; src[s] = src[o]; }
           }
         }

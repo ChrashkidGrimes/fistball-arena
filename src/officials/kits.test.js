@@ -180,3 +180,19 @@ test("suggestRefShirts: no colour preference — list order doesn't matter, ties
   // Two days, equal contrast → two different colours rather than the same one twice.
   assert.notEqual(a.games[0].kit.R, a.games[1].kit.R);
 });
+
+test("suggestKits picks team kits that leave a fitting referee shirt (without extra kit changes)", () => {
+  // Germany black (Uniform 1) v Brazil yellow is fine for the teams, but then
+  // neither the yellow nor the black referee shirt contrasts with both.
+  const tk = { Germany: [kit(BLACK), kit(WHITE)], Brazil: [kit(YELLOW), kit(BLUE)] };
+  const refKits = [{ id: "y", name: "Yellow", shirt: YELLOW }, { id: "k", name: "Black", shirt: BLACK }];
+  const g = game("Germany", "Brazil", D1, "10:00");
+  const plain = suggestKits([g], tk);
+  assert.deepEqual(kitOf(plain, g), { A: 1, B: 1 });
+  const res = suggestKits([g], tk, { refKits });
+  const rs = suggestRefShirts(res.games, tk, refKits);
+  assert.deepEqual(rs.unresolvable, []);
+  assert.ok(kitOf(rs, g).R);
+  assert.deepEqual(Object.keys(checkRefShirts(rs.games, tk, refKits)), []);
+  assert.deepEqual(res.changes, {});
+});

@@ -21,15 +21,16 @@ export default function SuggestKitsModal({ games, teamKits, refKits = [], thresh
     setTimeout(() => {
       try {
         // Team uniforms first, then the officials' shirts against them.
-        const r = suggestKits(games, teamKits, opts);
+        const r = suggestKits(games, teamKits, { ...opts, refKits });
         const rs = suggestRefShirts(r.games, teamKits, refKits, opts);
         const before = checkKits(games, teamKits, opts);
         const inScope = (g) => !opts.days.length || opts.days.includes(g.date);
-        const refBad = (gs) => Object.values(checkRefShirts(gs.filter(inScope), teamKits, refKits, opts)).filter((x) => x.level !== "unresolvable").length;
+        const refIssues = (gs, unres) => Object.values(checkRefShirts(gs.filter(inScope), teamKits, refKits, opts)).filter((x) => (x.level === "unresolvable") === unres).length;
         setRes({
           ...r, games: rs.games, proposals: [...r.proposals, ...rs.proposals], refUnresolvable: rs.unresolvable,
           clashesBefore: Object.values(before).filter((x) => x.level === "clash").length, changesBefore: sum(countChanges(games.filter(inScope))),
-          refBefore: refBad(games), refAfter: refBad(rs.games),
+          refBefore: refIssues(games, false), refAfter: refIssues(rs.games, false),
+          refUnresBefore: refIssues(games, true), refUnresAfter: refIssues(rs.games, true),
         });
       } catch (e) { alert("Suggest uniforms failed: " + (e?.message || e)); }
       setBusy(false);
@@ -98,6 +99,7 @@ export default function SuggestKitsModal({ games, teamKits, refKits = [], thresh
               <span>Clashes {delta(res.clashesBefore, res.clashes.length)}</span>
               <span>Kit changes {delta(res.changesBefore, nChanges)}</span>
               {refKits.length > 0 && <span>Referee shirt clashes {delta(res.refBefore, res.refAfter)}</span>}
+              {refKits.length > 0 && (res.refUnresBefore > 0 || res.refUnresAfter > 0) && <span title="No referee shirt colour contrasts with both teams">Without a fitting referee shirt {delta(res.refUnresBefore, res.refUnresAfter)}</span>}
             </div>
             {res.unresolvable.length > 0 && <p className="muted-sm">{res.unresolvable.length} game{res.unresolvable.length === 1 ? "" : "s"} can't be resolved — every uniform combination of the two teams clashes.</p>}
             {res.refUnresolvable.length > 0 && <p className="muted-sm">{res.refUnresolvable.length} game{res.refUnresolvable.length === 1 ? "" : "s"} without a fitting referee shirt — no colour contrasts with both teams.</p>}
