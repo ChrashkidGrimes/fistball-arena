@@ -50,6 +50,7 @@ Fistball Arena. Read this before touching `src/pages/Referees.jsx`,
 | Referee 1 / 2 (SR, Schiedsrichter) | `referee` | `r1`, `r2` |
 | Clerk (AS, Anschreiber, scorer) | `clerk` | `clerk` |
 | Assistant 1 / 2 (LR, Linienrichter, line judge) | `assistant` | `a1`, `a2` |
+| Court manager (Platzwart) | `courtManager` | `cm` |
 
 This mapping is final. Arena has exactly **one** scorer slot per game
 (`clerk`); no second clerk slot is added (the Reiden two-scorer setup does not
@@ -171,6 +172,16 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
 
 - Female referee on women's games (outside the hard-rule finals) — small bonus,
   lower weight than break violations.
+
+### 3.3b Court manager
+
+- One `cm` slot per game. A court manager may cover **several courts at the
+  same time** (court manager in parallel games is not a double booking), but
+  takes no other role at that time (that is a double booking).
+- Nation and club don't matter; court manager duty doesn't count for games in
+  a row or `maxPerDay`.
+- Mandatory only when someone has the `courtManager` role. Auto-assign fills
+  it after the other roles and spreads the duty evenly.
 
 ### 3.4 Assistant pairing (hard-coupled, "Option B")
 
