@@ -141,19 +141,20 @@ export default function Colors() {
     );
   };
 
-  // Officials' shirt per game (game.kit.R = colour id).
+  // Officials' shirt per game (game.kit.R = colour id): one swatch per event
+  // colour; click to pick, click the picked one again to clear.
   const refSelect = (g) => {
     const v = g.kit?.R || "";
-    const rk = refKits.find((r) => r.id === v);
+    const known = refKits.some((r) => r.id === v);
     return (
-      <>
-        <KitSwatch kit={rk ? { shirt: rk.shirt } : null} size={16} />
-        <select className="kit-sel" value={v} disabled={archived} onChange={(e) => setKit(g, "R", e.target.value)} aria-label="Referee shirt">
-          <option value="">—</option>
-          {refKits.filter((r) => r.shirt).map((r) => <option key={r.id} value={r.id}>{r.name || r.shirt}</option>)}
-          {v && !rk && <option value={v} disabled>(deleted colour)</option>}
-        </select>
-      </>
+      <span className="rs-pick" role="group" aria-label="Referee shirt">
+        {refKits.filter((r) => r.shirt).map((r) => (
+          <button key={r.id} type="button" className={`rs-sw ${r.id === v ? "on" : ""}`} style={{ background: r.shirt }} disabled={archived}
+            title={`${r.name || r.shirt}${r.id === v ? " — click to clear" : ""}`} aria-label={r.name || r.shirt} aria-pressed={r.id === v}
+            onClick={() => setKit(g, "R", r.id === v ? "" : r.id)} />
+        ))}
+        {v && !known && <button type="button" className="btn sm" disabled={archived} onClick={() => setKit(g, "R", "")} title="This colour was removed from the list">deleted colour ✕</button>}
+      </span>
     );
   };
 
