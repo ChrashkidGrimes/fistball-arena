@@ -689,8 +689,12 @@ export function subscribeReferees(cb) {
 export async function saveGameRank(gameId, rank) {
   await setDoc(edoc("games", gameId), { rank: rank || deleteField() }, { merge: true });
 }
-export async function saveGameRefs(gameId, refs) {
-  await setDoc(edoc("games", gameId), { refs }, { merge: true });
+// `auto` (optional): { [slot]: true } for slots filled by auto-assign; every
+// other filled slot counts as set by hand (see the Referees page).
+export async function saveGameRefs(gameId, refs, auto) {
+  const patch = { refs };
+  if (auto) patch.refsAuto = Object.fromEntries(["r1", "r2", "clerk", "a1", "a2"].map((s) => [s, !!auto[s]]));
+  await setDoc(edoc("games", gameId), patch, { merge: true });
 }
 
 // Uniform a team wears in a game (referees decide per day, sometimes per game).

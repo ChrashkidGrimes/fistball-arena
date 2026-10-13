@@ -24,6 +24,7 @@ export default function Referees() {
   const [day, setDay] = useState("all");
   const [q, setQ] = useState("");
   const [local, setLocal] = useState({});   // gameId -> {r1,..} optimistic overlay
+  const [localAuto, setLocalAuto] = useState({}); // gameId -> {r1: true,..} which slots auto-assign filled
   const [saved, setSaved] = useState({});    // gameId -> ts (flash "saved")
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [showList, setShowList] = useState(false);
@@ -52,12 +53,18 @@ export default function Referees() {
   if (!isAdmin) return <div className="empty">Admins only.</div>;
 
   const valOf = (g, k) => (local[g.id]?.[k] ?? g.refs?.[k] ?? "");
+  // Slots filled by auto-assign are flagged in game.refsAuto; any other filled
+  // slot (picked here, or from before the flag existed) counts as set by hand.
+  const autoOf = (g) => localAuto[g.id] || g.refsAuto || {};
+  const isManual = (g, k) => !!String(valOf(g, k)).trim() && !autoOf(g)[k];
   const setVal = (g, k, v) => {
     const next = { ...(local[g.id] || { ...(g.refs || {}) }), [k]: v };
+    const nextAuto = { ...autoOf(g), [k]: false };
     setLocal((p) => ({ ...p, [g.id]: next }));
+    setLocalAuto((p) => ({ ...p, [g.id]: nextAuto }));
     clearTimeout(timers.current[g.id]);
     timers.current[g.id] = setTimeout(async () => {
-      try { await saveGameRefs(g.id, next); setSaved((s) => ({ ...s, [g.id]: Date.now() })); setTimeout(() => setSaved((s) => { const n = { ...s }; delete n[g.id]; return n; }), 1500); }
+      try { await saveGameRefs(g.id, next, nextAuto); setSaved((s) => ({ ...s, [g.id]: Date.now() })); setTimeout(() => setSaved((s) => { const n = { ...s }; delete n[g.id]; return n; }), 1500); }
       catch (e) { alert("Could not save referees for #" + g.nr + ": " + (e?.code || e?.message || e)); }
     }, 500);
   };
@@ -111,22 +118,37 @@ export default function Referees() {
   const applyProposal = async (res) => {
     const byGame = {};
     for (const p of res.proposals) (byGame[p.gameId] ||= {})[p.slot] = p.to;
-    const next = {};
-    for (const g of merged) if (byGame[g.id]) next[g.id] = { ...(g.refs || {}), ...byGame[g.id] };
+    const next = {}, nextAuto = {};
+    for (const g of merged) if (byGame[g.id]) {
+      next[g.id] = { ...(g.refs || {}), ...byGame[g.id] };
+      nextAuto[g.id] = { ...autoOf(g), ...Object.fromEntries(Object.entries(byGame[g.id]).map(([s, to]) => [s, !!to])) };
+    }
     setLocal((p) => ({ ...p, ...next }));
-    await Promise.all(Object.entries(next).map(([id, r]) => saveGameRefs(id, r)));
+    setLocalAuto((p) => ({ ...p, ...nextAuto }));
+    await Promise.all(Object.entries(next).map(([id, r]) => saveGameRefs(id, r, nextAuto[id])));
   };
 
   // Remove every official from the games of the selected day (or all days).
   // Existing game reports keep their referees; only the planning is cleared.
-  const clearAssignments = async () => {
-    const targets = merged.filter((g) => (day === "all" || g.date === day) && ROLES.some(([k]) => String(g.refs?.[k] ?? "").trim()));
-    if (!targets.length) { alert("No officials assigned" + (day === "all" ? "." : ` on ${dayLabel(day)}.`)); return; }
+  // Remove officials from the games of the selected day (or all days): only
+  // the auto-assigned ones (manual picks stay), or all of them. Existing game
+  // reports keep their referees; only the planning is cleared.
+  const clearAssignments = async (onlyAuto) => {
+    const clears = (g, k) => !!String(valOf(g, k)).trim() && (!onlyAuto || !isManual(g, k));
+    const targets = merged.filter((g) => (day === "all" || g.date === day) && ROLES.some(([k]) => clears(g, k)));
     const when = day === "all" ? "all days" : dayLabel(day);
-    if (!confirm(`Remove all officials from ${targets.length} game${targets.length === 1 ? "" : "s"} (${when})? Game reports that already exist keep their referees.`)) return;
-    const empty = Object.fromEntries(ROLES.map(([k]) => [k, ""]));
-    setLocal((p) => ({ ...p, ...Object.fromEntries(targets.map((g) => [g.id, empty])) }));
-    try { await Promise.all(targets.map((g) => saveGameRefs(g.id, empty))); }
+    if (!targets.length) { alert(`No ${onlyAuto ? "auto-assigned " : ""}officials (${when}).`); return; }
+    const n = targets.reduce((s, g) => s + ROLES.filter(([k]) => clears(g, k)).length, 0);
+    const kept = onlyAuto ? merged.filter((g) => day === "all" || g.date === day).reduce((s, g) => s + ROLES.filter(([k]) => isManual(g, k)).length, 0) : 0;
+    if (!confirm(`Remove ${n} ${onlyAuto ? "auto-assigned " : ""}official${n === 1 ? "" : "s"} from ${targets.length} game${targets.length === 1 ? "" : "s"} (${when})?${kept ? ` ${kept} set by hand stay.` : ""} Game reports that already exist keep their referees.`)) return;
+    const next = {}, nextAuto = {};
+    for (const g of targets) {
+      next[g.id] = Object.fromEntries(ROLES.map(([k]) => [k, clears(g, k) ? "" : String(valOf(g, k))]));
+      nextAuto[g.id] = {}; // what's left is set by hand
+    }
+    setLocal((p) => ({ ...p, ...next }));
+    setLocalAuto((p) => ({ ...p, ...nextAuto }));
+    try { await Promise.all(targets.map((g) => saveGameRefs(g.id, next[g.id], nextAuto[g.id]))); }
     catch (e) { alert("Could not clear: " + (e?.code || e?.message || e)); }
   };
 
@@ -148,7 +170,8 @@ export default function Referees() {
       {!archived && (
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           <button className="btn primary sm" onClick={() => setAutoOpen(true)} disabled={!refs.length} title={refs.length ? "" : "Add officials first"}>Auto-assign…</button>
-          <button className="btn sm" onClick={clearAssignments} title={day === "all" ? "Remove all officials from all games" : `Remove all officials from the games on ${dayLabel(day)}`}>Clear assignments…</button>
+          <button className="btn sm" onClick={() => clearAssignments(true)} title={`Remove the auto-assigned officials (${day === "all" ? "all days" : dayLabel(day)}); officials set by hand stay`}>Clear auto-assigned…</button>
+          <button className="btn sm" onClick={() => clearAssignments(false)} title={`Remove all officials (${day === "all" ? "all days" : dayLabel(day)})`}>Clear all…</button>
         </div>
       )}
       {autoOpen && <AutoAssignModal games={merged} refs={refs} entries={event?.entries || []} days={days} day={day} dayLabel={dayLabel} onApply={applyProposal} onClose={() => setAutoOpen(false)} />}
@@ -185,7 +208,9 @@ export default function Referees() {
                   const lvl = cellLevel(iss);
                   const empty = !String(valOf(g, k)).trim();
                   return (
-                    <td key={k} className={`ag-cell ${lvl ? `rg-${empty ? "missing" : lvl}` : ""}`} title={iss ? iss.map((i) => (i.level === "hard" ? "⛔ " : "⚠ ") + i.msg).join("\n") : undefined}>
+                    <td key={k} className={`ag-cell ${lvl ? `rg-${empty ? "missing" : lvl}` : ""} ${isManual(g, k) ? "ag-manual" : ""}`}
+                      title={[isManual(g, k) && "✎ Set by hand", ...(iss || []).map((i) => (i.level === "hard" ? "⛔ " : "⚠ ") + i.msg)].filter(Boolean).join("\n") || undefined}>
+                      {isManual(g, k) && <span className="ag-manual-mark" aria-label="Set by hand">✎</span>}
                       {officialPicker(g, k, empty && lvl ? "required" : "—")}
                       {lvl && !empty && <span className={`rg-badge rg-badge-${lvl}`}>{iss.length > 1 ? iss.length : "!"}</span>}
                     </td>
