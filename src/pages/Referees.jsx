@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { subscribeGames, subscribeReferees, saveGameRefs } from "../cloud.js";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
-import { teamMeta, ROLE_LABEL } from "../officials/model.js";
+import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, availableAt, sameCountry } from "../officials/model.js";
 import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
 import AutoAssignModal from "./AutoAssignModal.jsx";
@@ -33,7 +33,7 @@ export default function Referees() {
   useEffect(() => subscribeGames(setGames), []);
   useEffect(() => subscribeReferees(setRefs), []);
 
-  const names = useMemo(() => [...new Set(refs.map(refName).filter(Boolean))].sort(), [refs]);
+  const sortedRefs = useMemo(() => [...refs].sort((a, b) => refName(a).localeCompare(refName(b))), [refs]);
   // Flag of an official's nation, by the name typed in a cell.
   const flagByName = useMemo(() => new Map(refs.map((r) => [refName(r).toLowerCase(), flagFor(r.country)])), [refs]);
   const teamNations = useMemo(() => [...new Set((event?.entries || []).map((e) => teamMeta(event.entries, e.name).country).filter(Boolean))].sort(), [event]);
@@ -62,6 +62,50 @@ export default function Referees() {
       try { await saveGameRefs(g.id, next); setSaved((s) => ({ ...s, [g.id]: Date.now() })); setTimeout(() => setSaved((s) => { const n = { ...s }; delete n[g.id]; return n; }), 1500); }
       catch (e) { alert("Could not save referees for #" + g.nr + ": " + (e?.code || e?.message || e)); }
     }, 500);
+  };
+
+  // Picker for one slot: officials with that role first, the rest below; each
+  // with flag and short hints (own nation, busy at this time, away, already
+  // in this game) so problems show before picking. "Other name…" allows a
+  // name outside the registry.
+  const busyAt = new Map(); // "date|time" → name → [game nr]
+  for (const x of merged) for (const [k] of ROLES) {
+    const n = String(x.refs?.[k] ?? "").trim().toLowerCase();
+    if (!n) continue;
+    const key = `${x.date}|${x.time}`;
+    if (!busyAt.has(key)) busyAt.set(key, new Map());
+    const m = busyAt.get(key);
+    m.set(n, [...(m.get(n) || []), x.nr]);
+  }
+  const officialPicker = (g, k, placeholder) => {
+    const v = String(valOf(g, k)).trim();
+    const known = sortedRefs.find((o) => refName(o).toLowerCase() === v.toLowerCase());
+    const value = known ? refName(known) : v;
+    const A = teamMeta(event?.entries, g.teamA), B = teamMeta(event?.entries, g.teamB);
+    const label = (o) => {
+      const n = refName(o), lower = n.toLowerCase(), hints = [];
+      if (ROLES.some(([s]) => s !== k && String(valOf(g, s)).trim().toLowerCase() === lower)) hints.push("in this game");
+      const other = (busyAt.get(`${g.date}|${g.time}`)?.get(lower) || []).filter((nr) => nr !== g.nr);
+      if (other.length) hints.push(`busy (#${other.join(", #")})`);
+      if (!availableAt(o, g.date, g.time)) hints.push("away");
+      if ((k === "r1" || k === "r2") && o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country))) hints.push("own nation");
+      return `${flagFor(o.country)} ${n}${hints.length ? " — " + hints.join(", ") : ""}`.trim();
+    };
+    const fits = sortedRefs.filter((o) => canFill(o, k)), others = sortedRefs.filter((o) => !canFill(o, k));
+    const pick = (e) => {
+      if (e.target.value !== "__other__") { setVal(g, k, e.target.value); return; }
+      const n = prompt("Name of the official (not in the registry):", value);
+      if (n !== null) setVal(g, k, n.trim());
+    };
+    return (
+      <select className="ref-input" value={value} disabled={archived} onChange={pick} aria-label={`${ROLES.find(([s]) => s === k)[1]} of game ${g.nr}`}>
+        <option value="">{placeholder}</option>
+        {v && !known && <option value={v}>{v} (not in the registry)</option>}
+        <optgroup label={`${ROLE_LABEL[SLOT_ROLE[k]]}s`}>{fits.map((o) => <option key={o.id} value={refName(o)}>{label(o)}</option>)}</optgroup>
+        {others.length > 0 && <optgroup label="Other officials">{others.map((o) => <option key={o.id} value={refName(o)}>{label(o)}</option>)}</optgroup>}
+        <option value={"__other__"}>Other name…</option>
+      </select>
+    );
   };
 
   // Write an auto-assign proposal: one saveGameRefs per changed game.
@@ -113,7 +157,6 @@ export default function Referees() {
       <IssueSummary check={check} games={games} day={day} showList={showList} setShowList={setShowList}
         issuesOnly={issuesOnly} setIssuesOnly={setIssuesOnly} onPick={(g) => { setDay("all"); setQ(String(g.nr)); }} />
 
-      <datalist id="ref-names">{names.map((n) => <option key={n} value={n} />)}</datalist>
 
       <div className="grid-scroll">
         <table className="ref-grid">
@@ -139,8 +182,7 @@ export default function Referees() {
                   return (
                     <td key={k} className={`ag-cell ${lvl ? `rg-${empty ? "missing" : lvl}` : ""}`} title={iss ? iss.map((i) => (i.level === "hard" ? "⛔ " : "⚠ ") + i.msg).join("\n") : undefined}>
                       <span className="flag">{flagByName.get(String(valOf(g, k)).trim().toLowerCase()) || ""}</span>
-                      <input className="ref-input" list="ref-names" value={valOf(g, k)} disabled={archived}
-                        onChange={(e) => setVal(g, k, e.target.value)} placeholder={empty && lvl ? "required" : "—"} />
+                      {officialPicker(g, k, empty && lvl ? "required" : "—")}
                       {lvl && !empty && <span className={`rg-badge rg-badge-${lvl}`}>{iss.length > 1 ? iss.length : "!"}</span>}
                     </td>
                   );
