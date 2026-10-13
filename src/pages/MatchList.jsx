@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pdf } from "@react-pdf/renderer";
 import { subscribeGames, subscribeReports, subscribeTeamKits, adminUnlock, runAdvancementAll } from "../cloud.js";
-import { resolveKit } from "../kits.js";
+import { resolveKit, teamKitsFor } from "../kits.js";
 import { KitSwatch } from "../KitSwatch.jsx";
 import { flagFor } from "../flags.js";
 import { useEvent } from "../eventContext.js";
@@ -141,10 +141,10 @@ export default function MatchList({ me }) {
               )}
             </div>
             <div className="mc-teams">
-              <KitSwatch kit={resolveKit(m.kit?.A, teamKits[m.teamA.name])} />
+              <KitSwatch kit={resolveKit(m.kit?.A, teamKitsFor(teamKits, m.teamA.name, m.category))} />
               <span className="flag">{flagFor(m.teamA.name)}</span>{teamLabel(m.teamA)}
               <span className="vs">vs</span>
-              <KitSwatch kit={resolveKit(m.kit?.B, teamKits[m.teamB.name])} />
+              <KitSwatch kit={resolveKit(m.kit?.B, teamKitsFor(teamKits, m.teamB.name, m.category))} />
               <span className="flag">{flagFor(m.teamB.name)}</span>{teamLabel(m.teamB)}
             </div>
           </div>
