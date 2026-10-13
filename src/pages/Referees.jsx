@@ -84,7 +84,9 @@ export default function Referees() {
   }
   // Wide enough for the longest name in the registry (flag + name), so every
   // picked name is shown in full; the hints only appear in the open list.
-  const pickerWidth = `${Math.max(14, ...sortedRefs.map((o) => refName(o).length)) + 5}ch`;
+  // (ch = width of "0"; names in a proportional font run ~15% wider, plus the
+  // flag and the select's arrow.)
+  const pickerWidth = `calc(${(Math.max(12, ...sortedRefs.map((o) => refName(o).length)) * 1.15 + 3).toFixed(1)}ch + 40px)`;
   const officialPicker = (g, k, placeholder) => {
     const v = String(valOf(g, k)).trim();
     const known = sortedRefs.find((o) => refName(o).toLowerCase() === v.toLowerCase());
