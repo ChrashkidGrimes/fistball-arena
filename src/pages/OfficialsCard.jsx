@@ -6,6 +6,9 @@ import { flagFor } from "../flags.js";
 const ROLE_TITLE = { SR: "Referee (R1/R2)", AS: "Scorer / clerk", LR: "Line judge (A1/A2)" };
 const STATUS_LABEL = { available: "✓ available", reserve: "reserve", unavailable: "✕ away" };
 const refName = (r) => [r.first, r.name].filter(Boolean).join(" ").trim();
+const NONE = "\u0000none"; // filter value for "field is empty"
+const NO_FILTER = { q: "", roles: [], gender: "", country: "", club: "", partner: "", max: "", day: {} };
+const low = (v) => String(v ?? "").trim().toLowerCase();
 
 // Officials registry editor on the Referees page: roles, nation / club (conflict
 // checks), gender, LR pair and per-day availability. Saved automatically.
@@ -15,6 +18,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
   const [slotText, setSlotText] = useState({}); // `${id}|${date}` -> raw text while typing
   const [fam, setFam] = useState("");
   const [giv, setGiv] = useState("");
+  const [flt, setFlt] = useState(NO_FILTER);
   const timers = useRef({});
   const pending = useRef({});
 
@@ -68,6 +72,24 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
     save(p, { lrPair: label }, 0);
   };
 
+  // Column filters (all must match). Values come from the current (edited) rows.
+  const setF = (patch) => setFlt((f) => ({ ...f, ...patch }));
+  const distinct = (key) => [...new Map(rows.map((x) => String(cur(x)[key] ?? "").trim()).filter(Boolean).map((v) => [v.toLowerCase(), v])).values()].sort((a, b) => a.localeCompare(b));
+  const nations = distinct("country"), clubs = distinct("club");
+  const filterOn = JSON.stringify(flt) !== JSON.stringify(NO_FILTER);
+  const pick = (want, value) => !want || (want === NONE ? !low(value) : low(value) === low(want));
+  const matches = (r0) => {
+    const r = cur(r0);
+    if (flt.q && !low(refName(r)).includes(low(flt.q))) return false;
+    if (flt.roles.length && !flt.roles.some((x) => rolesOf(r).includes(x))) return false;
+    if (flt.gender && (flt.gender === NONE ? r.gender : r.gender !== flt.gender)) return false;
+    if (!pick(flt.country, r.country) || !pick(flt.club, r.club)) return false;
+    if (flt.partner && (partnersOf(r0).length > 0) !== (flt.partner === "yes")) return false;
+    if (flt.max && (r.maxPerDay ? "set" : "empty") !== flt.max) return false;
+    return days.every((d) => !flt.day[d] || availabilityOn(r, d).status === flt.day[d]);
+  };
+  const shown = rows.filter(matches);
+
   const add = async () => {
     if (!fam.trim() && !giv.trim()) return;
     try { await addReferee({ name: fam.trim(), first: giv.trim() }); setFam(""); setGiv(""); }
@@ -83,6 +105,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
       <summary>Officials ({refs.length}) — roles, nation / club, availability</summary>
       <p className="muted-sm">Who may fill which slot, conflicts (referees never get games of their own nation or club; line judges are kept away from their own club where possible; for scorers neither matters), and availability per day. Empty roles = any slot; no entry for a day = available all day. LR partners always work the lines together. Saved automatically.</p>
       <datalist id="of-nations">{teamNations.map((n) => <option key={n} value={n} />)}</datalist>
+      {filterOn && <p className="muted-sm of-count">{shown.length} of {rows.length} shown · <button className="link-btn" onClick={() => setFlt(NO_FILTER)}>Clear filters</button></p>}
       <div className="grid-scroll">
         <table className="ref-grid of-grid">
           <thead>
@@ -91,10 +114,43 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
               {days.map((d) => <th key={d}>{dayLabel(d)}</th>)}
               <th aria-label="Remove" />
             </tr>
+            {rows.length > 0 && (
+              <tr className="of-filter">
+                <th><input className="of-input" value={flt.q} onChange={(e) => setF({ q: e.target.value })} placeholder="Filter name…" aria-label="Filter by name" /></th>
+                <th><span className="of-roles">{OFFICIAL_ROLES.map((x) => (
+                  <button key={x} className={`of-role ${flt.roles.includes(x) ? "on" : ""}`} title={`Only ${ROLE_TITLE[x]}`} aria-pressed={flt.roles.includes(x)}
+                    onClick={() => setF({ roles: flt.roles.includes(x) ? flt.roles.filter((y) => y !== x) : [...flt.roles, x] })}>{x}</button>
+                ))}</span></th>
+                <th><select className="of-input of-sm" value={flt.gender} onChange={(e) => setF({ gender: e.target.value })} aria-label="Filter by gender">
+                  <option value="">All</option><option value="f">♀ f</option><option value="m">♂ m</option><option value={NONE}>— not set</option>
+                </select></th>
+                {[["country", nations, "nation"], ["club", clubs, "club"]].map(([key, list, what]) => (
+                  <th key={key}><select className="of-input" value={flt[key]} onChange={(e) => setF({ [key]: e.target.value })} aria-label={`Filter by ${what}`}>
+                    <option value="">All</option>
+                    {list.map((v) => <option key={v} value={v}>{key === "country" ? `${flagFor(v)} ${v}`.trim() : v}</option>)}
+                    <option value={NONE}>— none</option>
+                  </select></th>
+                ))}
+                <th><select className="of-input" value={flt.partner} onChange={(e) => setF({ partner: e.target.value })} aria-label="Filter by LR partner">
+                  <option value="">All</option><option value="yes">With partner</option><option value="no">Without partner</option>
+                </select></th>
+                <th><select className="of-input of-xs" value={flt.max} onChange={(e) => setF({ max: e.target.value })} aria-label="Filter by max games per day">
+                  <option value="">All</option><option value="set">Set</option><option value="empty">—</option>
+                </select></th>
+                {days.map((d) => (
+                  <th key={d}><select className="of-input of-sm" value={flt.day[d] || ""} onChange={(e) => setF({ day: { ...flt.day, [d]: e.target.value } })} aria-label={`Filter by availability ${dayLabel(d)}`}>
+                    <option value="">All</option>
+                    {AVAIL_STATUS.map((x) => <option key={x} value={x}>{STATUS_LABEL[x]}</option>)}
+                  </select></th>
+                ))}
+                <th>{filterOn && <button className="btn sm" onClick={() => setFlt(NO_FILTER)} title="Clear filters" aria-label="Clear filters">✕</button>}</th>
+              </tr>
+            )}
           </thead>
           <tbody>
             {rows.length === 0 && <tr><td className="muted-sm" colSpan={8 + days.length}>No officials yet — import them via Players &amp; staff, or add one below.</td></tr>}
-            {rows.map((r0) => {
+            {rows.length > 0 && shown.length === 0 && <tr><td className="muted-sm" colSpan={8 + days.length}>No officials match the filters.</td></tr>}
+            {shown.map((r0) => {
               const r = cur(r0);
               const roles = r.roles?.length ? r.roles : OFFICIAL_ROLES;
               return (
