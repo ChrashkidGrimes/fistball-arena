@@ -702,7 +702,7 @@ const refereeId = (r, i) => (`${r.name}_${r.first}`).toLowerCase().replace(/[^a-
 // Officials fields (see src/officials/model.js). The import may bring some of
 // them; whatever it leaves blank is kept from the existing doc, so a re-import
 // never wipes availability etc. edited in the app.
-const OFFICIAL_FIELDS = ["roles", "country", "club", "gender", "lrPair", "availability", "maxPerDay"];
+const OFFICIAL_FIELDS = ["roles", "country", "club", "gender", "assistantPair", "availability", "maxPerDay"];
 export async function publishReferees(list, { replaceAll } = {}) {
   const prev = {};
   (await getDocs(ecol("referees"))).forEach((d) => { prev[d.id] = d.data(); });

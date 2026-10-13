@@ -168,9 +168,9 @@ function IssueSummary({ check, games, day, showList, setShowList, issuesOnly, se
   );
 }
 
-// Games per official per day, split by role (SR = referee 1/2, LR = assistants,
-// AS = clerk), to spot an uneven load at a glance.
-const ROLE_OF = { r1: "SR", r2: "SR", a1: "LR", a2: "LR", clerk: "AS" };
+// Games per official per day, split by role (referee 1/2, assistant 1/2,
+// clerk), to spot an uneven load at a glance.
+const ROLE_OF = { r1: "referee", r2: "referee", a1: "assistant", a2: "assistant", clerk: "clerk" };
 function LoadOverview({ games, days, dayLabel }) {
   const rows = useMemo(() => {
     const m = new Map();
@@ -180,12 +180,12 @@ function LoadOverview({ games, days, dayLabel }) {
       const k = n.toLowerCase();
       if (!m.has(k)) m.set(k, { name: n, total: 0, day: {} });
       const r = m.get(k); r.total++;
-      const d = (r.day[g.date] ||= { SR: 0, LR: 0, AS: 0 }); d[role]++;
+      const d = (r.day[g.date] ||= { referee: 0, assistant: 0, clerk: 0 }); d[role]++;
     }
     return [...m.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   }, [games]);
   if (!rows.length) return null;
-  const fmt = (d) => (d ? ["SR", "LR", "AS"].filter((r) => d[r]).map((r) => `${d[r]}× ${ROLE_LABEL[r]}`).join(" · ") : "");
+  const fmt = (d) => (d ? ["referee", "assistant", "clerk"].filter((r) => d[r]).map((r) => `${d[r]}× ${ROLE_LABEL[r]}`).join(" · ") : "");
   return (
     <details className="adv-tool" style={{ marginBottom: 10 }}>
       <summary>Load per official</summary>
