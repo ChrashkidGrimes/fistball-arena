@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { subscribeGames, subscribeReferees, saveGameRefs, saveGameRank } from "../cloud.js";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
-import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, availableAt, sameCountry, RANKS, RANK_LABEL, defaultGameRank } from "../officials/model.js";
+import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, availableAt, sameCountry, RANKS, RANK_LABEL, defaultGameRank, rankOf } from "../officials/model.js";
 import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
 import AutoAssignModal from "./AutoAssignModal.jsx";
@@ -89,6 +89,7 @@ export default function Referees() {
       if (other.length) hints.push(`busy (#${other.join(", #")})`);
       if (!availableAt(o, g.date, g.time)) hints.push("away");
       if ((k === "r1" || k === "r2") && o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country))) hints.push("own nation");
+      if ((k === "r1" || k === "r2") && rankOf(o) !== "normal") hints.unshift(RANK_LABEL[rankOf(o)].toLowerCase());
       return `${flagFor(o.country)} ${n}${hints.length ? " — " + hints.join(", ") : ""}`.trim();
     };
     const fits = sortedRefs.filter((o) => canFill(o, k)), others = sortedRefs.filter((o) => !canFill(o, k));
