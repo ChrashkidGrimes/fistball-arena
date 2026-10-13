@@ -181,7 +181,9 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
 - Nation and club don't matter; court manager duty doesn't count for games in
   a row or `maxPerDay`.
 - Mandatory only when someone has the `courtManager` role. Auto-assign fills
-  it after the other roles and spreads the duty evenly.
+  it after the other roles: **one court manager per round** looks after all
+  courts of that round (another one in the same round only if needed), and
+  the rounds are spread evenly between the court managers.
 
 ### 3.4 Assistant pairing (hard-coupled, "Option B")
 
