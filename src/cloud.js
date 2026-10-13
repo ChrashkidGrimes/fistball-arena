@@ -682,13 +682,13 @@ export function subscribeReferees(cb) {
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     (err) => { console.warn("referees unavailable:", err?.code || err); cb([]); });
 }
-// Assign the referee team to a game (planning, on the schedule). Stored on the
-// game doc as `refs`; pre-fills the game report when it's created.
 // A game's rank for the officials assignment ("top" | "good" | "normal");
 // "" goes back to the default from the round (see officials/model.js gameRank).
 export async function saveGameRank(gameId, rank) {
   await setDoc(edoc("games", gameId), { rank: rank || deleteField() }, { merge: true });
 }
+// Assign the referee team to a game (planning, on the schedule). Stored on the
+// game doc as `refs`; pre-fills the game report when it's created.
 // `auto` (optional): { [slot]: true } for slots filled by auto-assign; every
 // other filled slot counts as set by hand (see the Referees page).
 export async function saveGameRefs(gameId, refs, auto) {
