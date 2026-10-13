@@ -68,7 +68,7 @@ function squad(teamIdx, women) {
 }
 
 // Officials, twice what one round needs (2 courts → per round 4 referees,
-// 2 clerks, 4 assistants). `roles` / `country` / `gender` / `assistantPair` are the
+// 2 clerks, 4 assistants; one court manager can cover both courts). `roles` / `country` / `gender` / `assistantPair` are the
 // officials fields from src/officials/model.js (older app versions ignore them).
 const official = (role, roles) => ([name, first, country, gender, assistantPair]) =>
   ({ name, first, role, roles, country, gender, ...(assistantPair ? { assistantPair } : {}), photo: "", birthday: "" });
@@ -103,6 +103,10 @@ const REFEREES = [
   ...[
     ["Krämer", "Ute", "Germany", "f"], ["Lindner", "Paul", "Austria", "m"], ["Meier", "Anna", "Switzerland", "f"], ["Souza", "Lucas", "Brazil", "m"],
   ].map(official("Clerk", ["clerk"])),
+  // Court managers (may cover both courts at once)
+  ...[
+    ["Schulte", "Petra", "Germany", "f"], ["Novak", "Jan", "Austria", "m"],
+  ].map(official("Court manager", ["courtManager"])),
   // Assistants (line judges), in fixed pairs
   ...[
     ["Fuchs", "Jana", "Germany", "f", "pair-1"], ["Wolf", "Erik", "Germany", "m", "pair-1"],
