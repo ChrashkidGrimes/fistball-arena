@@ -43,8 +43,8 @@ export default function AutoAssignModal({ games, refs, entries, days, day, dayLa
               {days.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
             </select>
           </label>
-          <label title="Also replace names that are already filled in (on the selected days)">
-            <input type="checkbox" checked={overwrite} onChange={(e) => { setOverwrite(e.target.checked); setRes(null); }} disabled={busy} /> Overwrite existing entries
+          <label title="Also recompute the officials auto-assign filled in before (on the selected days). Officials set by hand always stay.">
+            <input type="checkbox" checked={overwrite} onChange={(e) => { setOverwrite(e.target.checked); setRes(null); }} disabled={busy} /> Overwrite auto-assigned entries
           </label>
           <button className="btn sm" onClick={run} disabled={busy}>{busy && !res ? "Computing…" : res ? "Recompute" : "Compute proposal"}</button>
         </div>

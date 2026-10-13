@@ -44,14 +44,24 @@ test("women's final gets a female referee", () => {
   assert.ok([r.r1, r.r2].includes("Ida Ref"));
 });
 
-test("locked cells stay unless overwrite", () => {
-  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ola", "Norway")];
-  const g = game({ refs: { r1: "Ola Ref" } });
+test("filled cells stay; overwrite recomputes only the auto-assigned ones, never those set by hand", () => {
+  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ola", "Norway"), ref("Ida", "Italy")];
+  const g = game({ refs: { r1: "Ola Ref" } }); // no refsAuto → set by hand
   const res = autoAssign([g], offs, []);
   assert.equal(at(res, g).r1, "Ola Ref");
   assert.ok(!res.proposals.some((p) => p.slot === "r1"));
+  // Overwrite keeps the manual r1 and fills r2.
   const res2 = autoAssign([g], offs, [], { overwrite: true });
-  assert.equal(res2.games[0].refs.r1 !== "" && res2.games[0].refs.r2 !== "", true);
+  assert.equal(at(res2, g).r1, "Ola Ref");
+  assert.ok(at(res2, g).r2);
+  // An auto-assigned r2 that now conflicts (Ida's nation plays) is replaced; the manual r1 stays.
+  const g2 = game({ teamB: { name: "Italy" }, refs: { r1: "Ola Ref", r2: "Ida Ref" }, refsAuto: { r2: true } });
+  const res3 = autoAssign([g2], offs, [], { overwrite: true });
+  assert.equal(at(res3, g2).r1, "Ola Ref");
+  assert.notEqual(at(res3, g2).r2, "Ida Ref");
+  assert.equal(res3.after.counts.hard, 0);
+  // Without overwrite the auto-assigned r2 stays too.
+  assert.equal(at(autoAssign([g2], offs, []), g2).r2, "Ida Ref");
 });
 
 test("respects availability and avoids double booking", () => {

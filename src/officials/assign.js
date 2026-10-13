@@ -19,7 +19,8 @@
 //    another game of the same day (chains of up to two moves).
 // 3. Local improvement: swap two officials between games of the same day while
 //    the day's score goes down and no hard violation is added (time-boxed).
-// Locked cells (already filled) stay as they are unless opts.overwrite.
+// Filled cells stay as they are. With opts.overwrite, cells auto-assign filled
+// before (game.refsAuto[slot]) are recomputed; cells set by hand never change.
 
 import {
   canFill, parseRoles, availabilityOn, availableAt, parseSlots,
@@ -114,7 +115,7 @@ export function autoAssign(games, officials, entries, opts = {}) {
     const refs = { ...(g.refs || {}) };
     const target = inScope(g) && !(isKnockout(g) && (isPlaceholder(g.teamA?.name ?? g.teamA) || isPlaceholder(g.teamB?.name ?? g.teamB)));
     if (inScope(g) && !target) skipped.push(g.id);
-    if (target && opts.overwrite) for (const s of SLOTS) refs[s] = "";
+    if (target && opts.overwrite) for (const s of SLOTS) if (g.refsAuto?.[s]) refs[s] = "";
     return { ...g, refs, _target: target };
   });
 
@@ -276,7 +277,7 @@ export function autoAssign(games, officials, entries, opts = {}) {
   }
 
   const deadline = Date.now() + (opts.timeBudgetMs ?? 1500);
-  const locked = new Map(games.map((g) => [g.id, opts.overwrite ? {} : { ...(g.refs || {}) }]));
+  const locked = new Map(games.map((g) => [g.id, Object.fromEntries(SLOTS.map((s) => [s, opts.overwrite && g.refsAuto?.[s] ? "" : g.refs?.[s] ?? ""]))]));
   const fresh = (g, s) => g._target && !String(locked.get(g.id)?.[s] ?? "").trim() && String(g.refs[s] ?? "").trim();
   const days = [...new Set(work.filter((g) => g._target).map((g) => g.date))];
   const byId = new Map(work.map((g) => [g.id, g]));
