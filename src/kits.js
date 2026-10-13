@@ -3,9 +3,9 @@
 // in older events — a shirt hex string.
 export function resolveKit(value, teamKits) {
   if (!value) return null;
-  if (typeof value === "string") return { shirt: value, shorts: "" };
+  if (typeof value === "string") return { shirt: value };
   const k = (teamKits || [])[value - 1];
-  return k && (k.shirt || k.shorts) ? { ...k, n: value } : null;
+  return k?.shirt ? { shirt: k.shirt, n: value } : null;
 }
 
 // Uniforms are registered per team AND category, so a club with a men's and a

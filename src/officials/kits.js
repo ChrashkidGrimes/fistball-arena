@@ -1,7 +1,7 @@
 // Uniform (kit) selection — pure logic, see docs/referee-assignment-spec.md §4.
 //
 // Colours: two shirts clash when their CIE76 ΔE (Lab) is below the threshold.
-// Only shirts count — shorts are ignored.
+// Only shirt colours count.
 //
 // suggestKits(games, teamKits, opts) → {
 //   proposals: [{ gameId, side: "A"|"B", from, to }],
