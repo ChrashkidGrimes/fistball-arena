@@ -4,11 +4,12 @@
 
 import { flagFor } from "../flags.js";
 
-// Official roles: referee (Referee 1/2), clerk (scorer), assistant (line judge, Assistant 1/2).
-export const OFFICIAL_ROLES = ["referee", "clerk", "assistant"];
-export const SLOT_ROLE = { r1: "referee", r2: "referee", clerk: "clerk", a1: "assistant", a2: "assistant" };
+// Official roles: referee (Referee 1/2), clerk (scorer), assistant (line judge,
+// Assistant 1/2), court manager (slot "cm"; may cover several courts at once).
+export const OFFICIAL_ROLES = ["referee", "clerk", "assistant", "courtManager"];
+export const SLOT_ROLE = { r1: "referee", r2: "referee", clerk: "clerk", a1: "assistant", a2: "assistant", cm: "courtManager" };
 // Display names.
-export const ROLE_LABEL = { referee: "Referee", clerk: "Clerk", assistant: "Assistant" };
+export const ROLE_LABEL = { referee: "Referee", clerk: "Clerk", assistant: "Assistant", courtManager: "Court manager" };
 export const AVAIL_STATUS = ["available", "reserve", "unavailable"];
 
 const norm = (s) => String(s ?? "").trim().toLowerCase();
@@ -19,6 +20,7 @@ const ROLE_WORDS = [
   ["referee", /^(sr|r|ref|referee|schiedsrichter|árbitro|arbitro|umpire)$/],
   ["clerk", /^(as|clerk|scorer|scorekeeper|anschreiber|apontador|secretary)$/],
   ["assistant", /^(lr|a|assistant|line ?judge|lines(man|woman|person)|linienrichter|juiz de linha)$/],
+  ["courtManager", /^(cm|court ?manager|courtmanager|platzwart|platzverantwortlicher?|court ?director|gerente de quadra|delegado de cancha)$/],
 ];
 export function parseRoles(v) {
   const words = (Array.isArray(v) ? v : String(v ?? "").split(/[,;/|+]+/)).map(norm).filter(Boolean);
