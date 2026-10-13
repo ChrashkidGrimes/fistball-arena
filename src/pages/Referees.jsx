@@ -82,6 +82,9 @@ export default function Referees() {
     const m = busyAt.get(key);
     m.set(n, [...(m.get(n) || []), x.nr]);
   }
+  // Wide enough for the longest name in the registry (flag + name), so every
+  // picked name is shown in full; the hints only appear in the open list.
+  const pickerWidth = `${Math.max(14, ...sortedRefs.map((o) => refName(o).length)) + 5}ch`;
   const officialPicker = (g, k, placeholder) => {
     const v = String(valOf(g, k)).trim();
     const known = sortedRefs.find((o) => refName(o).toLowerCase() === v.toLowerCase());
@@ -96,6 +99,7 @@ export default function Referees() {
       if ((k === "r1" || k === "r2") && o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country))) hints.push("own nation");
       return `${flagFor(o.country)} ${n}${hints.length ? " — " + hints.join(", ") : ""}`.trim();
     };
+    const text = (o) => (refName(o) === value ? `${flagFor(o.country)} ${refName(o)}`.trim() : label(o));
     const fits = sortedRefs.filter((o) => canFill(o, k)), others = sortedRefs.filter((o) => !canFill(o, k));
     const pick = (e) => {
       if (e.target.value !== "__other__") { setVal(g, k, e.target.value); return; }
@@ -103,11 +107,11 @@ export default function Referees() {
       if (n !== null) setVal(g, k, n.trim());
     };
     return (
-      <select className="ref-input" value={value} disabled={archived} onChange={pick} aria-label={`${ROLES.find(([s]) => s === k)[1]} of game ${g.nr}`}>
+      <select className="ref-input" style={{ width: pickerWidth }} value={value} disabled={archived} onChange={pick} aria-label={`${ROLES.find(([s]) => s === k)[1]} of game ${g.nr}`}>
         <option value="">{placeholder}</option>
         {v && !known && <option value={v}>{v} (not in the registry)</option>}
-        <optgroup label={`${ROLE_LABEL[SLOT_ROLE[k]]}s`}>{fits.map((o) => <option key={o.id} value={refName(o)}>{label(o)}</option>)}</optgroup>
-        {others.length > 0 && <optgroup label="Other officials">{others.map((o) => <option key={o.id} value={refName(o)}>{label(o)}</option>)}</optgroup>}
+        <optgroup label={`${ROLE_LABEL[SLOT_ROLE[k]]}s`}>{fits.map((o) => <option key={o.id} value={refName(o)}>{text(o)}</option>)}</optgroup>
+        {others.length > 0 && <optgroup label="Other officials">{others.map((o) => <option key={o.id} value={refName(o)}>{text(o)}</option>)}</optgroup>}
         <option value={"__other__"}>Other name…</option>
       </select>
     );
