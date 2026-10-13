@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { addReferee, updateReferee, deleteReferee } from "../cloud.js";
-import { OFFICIAL_ROLES, AVAIL_STATUS, availabilityOn, parseSlots } from "../officials/model.js";
+import { OFFICIAL_ROLES, AVAIL_STATUS, availabilityOn, parseSlots, rolesOf } from "../officials/model.js";
+import { flagFor } from "../flags.js";
 
 const ROLE_TITLE = { SR: "Referee (R1/R2)", AS: "Scorer / clerk", LR: "Line judge (A1/A2)" };
 const STATUS_LABEL = { available: "✓ available", reserve: "reserve", unavailable: "✕ away" };
@@ -18,7 +19,6 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
   const pending = useRef({});
 
   const rows = useMemo(() => [...refs].sort((a, b) => refName(a).localeCompare(refName(b))), [refs]);
-  const pairs = useMemo(() => [...new Set(refs.map((r) => r.lrPair).filter(Boolean))].sort(), [refs]);
 
   const cur = (r) => ({ ...r, ...local[r.id] });
   const save = (r, patch, delay = 500) => {
@@ -52,6 +52,22 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
     setSlotText((p) => { const n = { ...p }; delete n[k]; return n; });
   };
 
+  // LR partner: picked as a person, stored as a shared lrPair label on both
+  // (rules, auto-assign and the import work with the label).
+  const canLR = (r) => rolesOf(r).includes("LR");
+  const partnersOf = (r) => { const p = cur(r).lrPair; return p ? rows.filter((x) => x.id !== r.id && cur(x).lrPair === p) : []; };
+  const setPartner = (r, partnerId) => {
+    const p = rows.find((x) => x.id === partnerId);
+    // Whoever either of them was paired with before is left without a partner.
+    for (const x of [r, p].filter(Boolean)) {
+      for (const old of partnersOf(x)) if (old.id !== r.id && old.id !== p?.id) save(old, { lrPair: "" }, 0);
+    }
+    if (!p) { save(r, { lrPair: "" }, 0); return; }
+    const label = [r.id, p.id].sort().join("+");
+    save(r, { lrPair: label }, 0);
+    save(p, { lrPair: label }, 0);
+  };
+
   const add = async () => {
     if (!fam.trim() && !giv.trim()) return;
     try { await addReferee({ name: fam.trim(), first: giv.trim() }); setFam(""); setGiv(""); }
@@ -65,14 +81,13 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
   return (
     <details className="adv-tool officials-card">
       <summary>Officials ({refs.length}) — roles, nation / club, availability</summary>
-      <p className="muted-sm">Who may fill which slot, conflicts (referees never get games of their own nation or club; line judges are kept away from their own club where possible; for scorers neither matters), and availability per day. Empty roles = any slot; no entry for a day = available all day. Two people with the same LR pair always work the lines together. Saved automatically.</p>
+      <p className="muted-sm">Who may fill which slot, conflicts (referees never get games of their own nation or club; line judges are kept away from their own club where possible; for scorers neither matters), and availability per day. Empty roles = any slot; no entry for a day = available all day. LR partners always work the lines together. Saved automatically.</p>
       <datalist id="of-nations">{teamNations.map((n) => <option key={n} value={n} />)}</datalist>
-      <datalist id="of-pairs">{pairs.map((n) => <option key={n} value={n} />)}</datalist>
       <div className="grid-scroll">
         <table className="ref-grid of-grid">
           <thead>
             <tr>
-              <th>Official</th><th>Roles</th><th>Gender</th><th>Nation</th><th>Club</th><th>LR pair</th><th title="Max games per day (optional)">Max/day</th>
+              <th>Official</th><th>Roles</th><th>Gender</th><th>Nation</th><th>Club</th><th>LR partner</th><th title="Max games per day (optional)">Max/day</th>
               {days.map((d) => <th key={d}>{dayLabel(d)}</th>)}
               <th aria-label="Remove" />
             </tr>
@@ -84,7 +99,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
               const roles = r.roles?.length ? r.roles : OFFICIAL_ROLES;
               return (
                 <tr key={r.id}>
-                  <td className="of-name">{refName(r) || <span className="muted-sm">—</span>}</td>
+                  <td className="of-name"><span className="flag">{flagFor(r.country)}</span>{refName(r) || <span className="muted-sm">—</span>}</td>
                   <td><span className="of-roles">{OFFICIAL_ROLES.map((x) => (
                     <button key={x} className={`of-role ${roles.includes(x) ? "on" : ""}`} disabled={archived} title={ROLE_TITLE[x]} onClick={() => toggleRole(r0, x)}>{x}</button>
                   ))}</span></td>
@@ -95,7 +110,16 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                   </td>
                   <td><input className="of-input" list="of-nations" value={r.country || ""} disabled={archived} onChange={(e) => save(r0, { country: e.target.value })} placeholder="—" aria-label="Nation" /></td>
                   <td><input className="of-input" value={r.club || ""} disabled={archived} onChange={(e) => save(r0, { club: e.target.value })} placeholder="—" aria-label="Club" /></td>
-                  <td><input className="of-input of-sm" list="of-pairs" value={r.lrPair || ""} disabled={archived} onChange={(e) => save(r0, { lrPair: e.target.value })} placeholder="—" aria-label="LR pair" /></td>
+                  <td>{(() => {
+                    const ps = partnersOf(r0), v = ps[0]?.id || "";
+                    return (
+                      <select className="of-input" value={v} disabled={archived || !canLR(r)} onChange={(e) => setPartner(r0, e.target.value)} aria-label="LR partner"
+                        title={ps.length > 1 ? `Shared with ${ps.map((x) => refName(x)).join(", ")} — pick one partner` : canLR(r) ? undefined : "Only for line judges (role LR)"}>
+                        <option value="">—</option>
+                        {rows.filter((x) => x.id !== r.id && (canLR(cur(x)) || x.id === v)).map((x) => <option key={x.id} value={x.id}>{refName(x)}</option>)}
+                      </select>
+                    );
+                  })()}</td>
                   <td><input className="of-input of-xs" type="number" min="1" value={r.maxPerDay ?? ""} disabled={archived} onChange={(e) => save(r0, { maxPerDay: e.target.value === "" ? "" : Math.max(1, parseInt(e.target.value, 10) || 1) })} placeholder="—" aria-label="Max games per day" /></td>
                   {days.map((d) => {
                     const a = availabilityOn(r, d);
