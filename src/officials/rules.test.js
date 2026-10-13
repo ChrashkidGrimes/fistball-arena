@@ -54,15 +54,15 @@ test("nation: irrelevant for scorer and line judges, warning for a referee on th
   assert.deepEqual(codes(res, g, "a2"), ["soft:refereeAsAssistantNation"]);
 });
 
-test("club: hard for referees, soft for line judges, irrelevant for the scorer", () => {
+test("club: hard for referees, assistants and clerks", () => {
   const entries = [{ name: "TV Brettorf", club: "TV Brettorf", country: "Germany" }, { name: "Ahlhorn", club: "Ahlhorner SV", country: "Germany" }];
   const club = (first, roles) => ({ first, name: "X", club: "Ahlhorner SV", roles });
   const ref = club("Ref", ["referee"]), lr = club("Line", ["assistant"]), as = club("Clerk", ["clerk"]);
   const g = game({ teamA: { name: "TV Brettorf" }, teamB: { name: "Ahlhorn" }, refs: { r1: "Ref X", r2: N(O.sui), clerk: "Clerk X", a1: "Line X" } });
   const res = checkAssignments([g], [...officials, ref, lr, as], entries);
   assert.deepEqual(codes(res, g, "r1"), ["hard:club"]);
-  assert.deepEqual(codes(res, g, "a1"), ["soft:assistantClub"]);
-  assert.deepEqual(codes(res, g, "clerk"), []);
+  assert.deepEqual(codes(res, g, "a1"), ["hard:club"]);
+  assert.deepEqual(codes(res, g, "clerk"), ["hard:club"]);
 });
 
 test("availability: unavailable / outside time slots = hard, reserve = soft", () => {
@@ -205,4 +205,31 @@ test("court manager: several courts at once is fine, another role at the same ti
   const g6 = game({ refs: { r1: N(O.sui), r2: N(O.den) } });
   assert.deepEqual(codes(checkAssignments([g6], offs, []), g6, "cm", ["missing"]), ["hard:missing"]);
   assert.deepEqual(codes(checkAssignments([g6], [O.sui, O.den], []), g6, "cm", ["missing"]), []);
+});
+
+test("event settings: Referee 2 only in the finals rounds; Clerk 2 on chosen courts; clerks may work in a row", () => {
+  const as = { first: "Kurt", name: "Clerk", roles: ["clerk"] };
+  const offs = [O.sui, O.den, as];
+  const grp = game({ refs: { r1: N(O.sui) } });
+  const semi = game({ round: "Semifinal 1", time: "11:00", refs: { r1: N(O.sui) } });
+  const cfg = { r2: "finals", clerk2Courts: ["1"] };
+  const res = checkAssignments([grp, semi], offs, [], cfg);
+  assert.deepEqual(codes(res, grp, "r2", ["missing"]), []);
+  assert.deepEqual(codes(res, semi, "r2", ["missing"]), ["hard:missing"]);
+  assert.deepEqual(codes(res, grp, "clerk2", ["missing"]), ["hard:missing"]);
+  assert.deepEqual(codes(res, game({ court: 2 }), "clerk2", ["missing"]), []);
+  // A clerk in three rounds in a row: no break issues.
+  const gs = ["09:00", "10:00", "11:00"].map((time) => game({ time, refs: { r1: N(O.sui), r2: N(O.den), clerk: "Kurt Clerk" } }));
+  const res2 = checkAssignments(gs, offs, []);
+  for (const g of gs) assert.deepEqual(codes(res2, g, "clerk", ["inRow"]), []);
+});
+
+test("final: referees may work the lines; club games: referee nation is only a warning", () => {
+  const fin = game({ round: "Gold medal match", refs: { r1: N(O.sui), r2: N(O.den), a1: N(O.aut), a2: N(O.lrGer) } });
+  const res = checkAssignments([fin], officials, []);
+  assert.deepEqual(codes(res, fin, "a1"), []);                   // referee on the line: fine
+  assert.deepEqual(codes(res, fin, "a2"), ["soft:finalLines"]);  // pure assistant
+  const club = game({ category: "Clubs U18 Men", teamA: { name: "Linz" }, refs: { r1: N(O.aut), r2: N(O.den) } });
+  const entries = [{ name: "Linz", country: "Austria" }];
+  assert.deepEqual(codes(checkAssignments([club], officials, entries), club, "r1"), ["soft:nationClub"]);
 });
