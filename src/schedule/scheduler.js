@@ -52,6 +52,7 @@ export function normalizeSlots(s) {
       date: d.date, start: d.start || "09:00", end: d.end || "18:00",
       ...(Number(d.gameMinutes) > 0 ? { gameMinutes: Number(d.gameMinutes) } : {}),
       ...(Array.isArray(d.phases) && d.phases.length ? { phases: d.phases } : {}),
+      ...(d.closed ? { closed: true } : {}),
     })),
     gameMinutes, breakMinutes,
   };
@@ -75,7 +76,10 @@ function orderFixtures(fixtures) {
   return [...group, ...ko];
 }
 
-export function allocate(fixtures, slotConfig) {
+// occupied: games already published that must stay where they are
+// ([{ date, time, court }]) — their court-time is skipped when placing new
+// games (e.g. adding clubs to an event whose national-team schedule is set).
+export function allocate(fixtures, slotConfig, occupied = []) {
   const cfg = normalizeSlots(slotConfig);
   const { courts, days, gameMinutes, breakMinutes } = cfg;
   const warnings = [];
@@ -84,13 +88,26 @@ export function allocate(fixtures, slotConfig) {
   // per-day offset so slots in different days are never "adjacent" (rest check).
   const cells = [];
   let capacity = 0;
+  const busyCourt = new Map(); // `${date}|${court}` -> [[start, end)]
+  for (const o of occupied || []) {
+    if (!o?.date || !o?.time || o.court == null) continue;
+    const day = days.find((x) => x.date === o.date);
+    const t0 = toMinutes(o.time);
+    const k = `${o.date}|${o.court}`;
+    (busyCourt.get(k) || busyCourt.set(k, []).get(k)).push([t0, t0 + dayGameMinutes(day, gameMinutes)]);
+  }
+  const overlapsExisting = (date, court, t0, t1) => (busyCourt.get(`${date}|${court}`) || []).some(([a, b]) => t0 < b && a < t1);
+
   days.forEach((day, d) => {
+    if (day.closed) return; // no new games on this day
     const s0 = toMinutes(day.start);
     const step = Math.max(5, dayGameMinutes(day, gameMinutes) + breakMinutes);
     const n = slotsPerDay(day, gameMinutes, breakMinutes);
-    capacity += n * courts.length;
     for (let s = 0; s < n; s++) for (let c = 0; c < courts.length; c++) {
-      cells.push({ d, s, c, global: d * 1000 + s, timeMin: s0 + s * step });
+      const timeMin = s0 + s * step;
+      if (overlapsExisting(day.date, String(courts[c]), timeMin, timeMin + dayGameMinutes(day, gameMinutes))) continue;
+      capacity++;
+      cells.push({ d, s, c, global: d * 1000 + s, timeMin });
     }
   });
 

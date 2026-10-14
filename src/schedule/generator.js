@@ -94,7 +94,7 @@ export function generateSchedule(config) {
 
   if (!fixtures.length) return { games: [], warnings, unplaced: [], fixtureCount: 0 };
 
-  const { placed, unplaced, warnings: aw } = allocate(fixtures, config.slots);
+  const { placed, unplaced, warnings: aw } = allocate(fixtures, config.slots, config.occupied);
   warnings.push(...aw);
 
   let nr = Number(config.startNr) || 1;

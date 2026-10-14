@@ -316,7 +316,11 @@ export default function Settings({ me }) {
       categoryBuilder: details.categoryBuilder, entries: details.entries,
       formatOverrides: details.formatOverrides, formatVariants: details.formatVariants, slots: details.slots,
     }, append ? maxNr + 1 : 1);
-    if (append) cfg.categories = cfg.categories.filter((c) => !existingCats.has(c.name));
+    if (append) {
+      cfg.categories = cfg.categories.filter((c) => !existingCats.has(c.name));
+      // Existing games keep their day/court/time; new ones go around them.
+      cfg.occupied = existingGames.map((g) => ({ date: g.date, time: g.time, court: String(g.court ?? "") }));
+    }
     if (append && !cfg.categories.length) { setStatus("All categories already have published games — nothing new to add."); setGenResult(null); return; }
     const r = generateSchedule(cfg);
     const shortOf = {};
@@ -642,7 +646,7 @@ export default function Settings({ me }) {
             </div>
           )}
           {existingGames.length > 0 && !genResult && (
-            <p className="muted-sm" style={{ marginTop: 8 }}>This event already has <b>{existingGames.length}</b> published games. “<b>Add new categories</b>” builds only the categories without games yet (e.g. clubs) and numbers them after the existing ones — the current part (e.g. national teams) is left untouched.</p>
+            <p className="muted-sm" style={{ marginTop: 8 }}>This event already has <b>{existingGames.length}</b> published games. “<b>Add new categories</b>” builds only the categories without games yet (e.g. clubs) and numbers them after the existing ones — the current part (e.g. national teams) is left untouched, and the new games avoid its courts and times. Mark days as “No new games” in Courts &amp; schedule to keep them for the existing part.</p>
           )}
           {genResult && (
             <>

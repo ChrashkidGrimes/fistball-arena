@@ -67,7 +67,10 @@ export default function SlotsEditor({ value, onChange, disabled }) {
             {DAY_PHASES.map(([k, label]) => (
               <button key={k} type="button" disabled={disabled} className={`filter-pill ${(d.phases || []).includes(k) ? "active" : ""}`} onClick={() => togglePhase(i, k)}>{label}</button>
             ))}
-            {!(d.phases || []).length && <span className="muted-sm">any phase</span>}
+            {!(d.phases || []).length && !d.closed && <span className="muted-sm">any phase</span>}
+            <button type="button" disabled={disabled} className={`filter-pill ${d.closed ? "active" : ""}`} style={{ marginLeft: "auto" }}
+              title="The generator won't place new games on this day (games already published stay)"
+              onClick={() => setDay(i, { closed: !d.closed })}>No new games</button>
           </div>
         </div>
       ))}
