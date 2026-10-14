@@ -267,7 +267,12 @@ export default function Settings({ me }) {
       const dataUrl = await fileToLogoDataUrl(file);
       await addLogo({ name: file.name.replace(/\.[^.]+$/, ""), dataUrl }, me);
       setStatus("Logo added to the library.");
-    } catch (e2) { setStatus("Upload failed: " + (e2?.message || e2)); }
+    } catch (e2) {
+      // Shown as an alert too: the status line is hidden behind the library modal.
+      const msg = "Upload failed: " + (e2?.code || e2?.message || e2);
+      setStatus(msg);
+      window.alert(msg);
+    }
   };
   const asLogo = (l) => ({ name: l.name, dataUrl: l.dataUrl });
   const addPromoter = (l) => setPromoters((p) => (p.some((x) => x.dataUrl === l.dataUrl) ? p : [...p, asLogo(l)]));
@@ -671,7 +676,6 @@ export default function Settings({ me }) {
             <span className="muted-sm">Shown on the game report (PDF), the app topbar and Fistball Live.</span>
             <button className="btn sm" onClick={() => fileRef.current?.click()} disabled={archived}>+ Upload logo</button>
           </div>
-          <input ref={fileRef} type="file" accept="image/*" hidden onChange={onUpload} />
 
           <div className="subhead">This event</div>
           <div className="brand-picks">
@@ -808,6 +812,7 @@ export default function Settings({ me }) {
         />
       )}
 
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={onUpload} />
       {libOpen && (
         <div className="modal-overlay" onClick={() => setLibOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -815,6 +820,7 @@ export default function Settings({ me }) {
             <h3 className="modal-title" style={{ marginBottom: 2 }}>Logo library ({logos.length})</h3>
             <p className="muted-sm" style={{ marginTop: 0 }}>Pick a logo to use in this event, or upload a new one.</p>
             <button className="btn sm" onClick={() => fileRef.current?.click()} disabled={archived}>+ Upload logo</button>
+            {/^(Uploading|Logo added|Upload failed)/.test(status) && <p className="muted-sm" style={{ marginTop: 8 }}>{status}</p>}
             {logos.length === 0 && <p className="muted-sm" style={{ marginTop: 10 }}>No logos yet — upload one above.</p>}
             <div className="logo-grid" style={{ marginTop: 10 }}>
               {logos.map((l) => (
