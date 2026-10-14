@@ -4,7 +4,7 @@ import { SLOT_LABEL, teamsLabel } from "../officials/rules.js";
 
 // Auto-assign officials: compute a proposal (src/officials/assign.js), show it
 // as a diff, and write it only when the admin clicks Apply.
-export default function AutoAssignModal({ games, refs, entries, days, day, dayLabel, onApply, onClose }) {
+export default function AutoAssignModal({ games, refs, entries, rules, days, day, dayLabel, onApply, onClose }) {
   const [scope, setScope] = useState(day === "all" ? "all" : day);
   const [overwrite, setOverwrite] = useState(false);
   const [res, setRes] = useState(null);
@@ -15,7 +15,7 @@ export default function AutoAssignModal({ games, refs, entries, days, day, dayLa
     setBusy(true); setRes(null);
     // Let the "Computing…" state paint before the (synchronous) solver runs.
     setTimeout(() => {
-      try { setRes(autoAssign(games, refs, entries, { days: scope === "all" ? [] : [scope], overwrite })); }
+      try { setRes(autoAssign(games, refs, entries, { days: scope === "all" ? [] : [scope], overwrite, rules })); }
       catch (e) { alert("Auto-assign failed: " + (e?.message || e)); }
       setBusy(false);
     }, 30);

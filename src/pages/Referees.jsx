@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { subscribeGames, subscribeReferees, saveGameRefs, saveGameRank, subscribeTeamKits, subscribeRefKits } from "../cloud.js";
+import { subscribeGames, subscribeReferees, saveGameRefs, saveGameRank, subscribeTeamKits, subscribeRefKits, updateEventFields } from "../cloud.js";
 import { resolveKit, teamKitsFor } from "../kits.js";
 import { KitSwatch } from "../KitSwatch.jsx";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
-import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, availableAt, sameCountry, RANKS, RANK_LABEL, defaultGameRank, rankOf } from "../officials/model.js";
-import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
+import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, rolesOf, availableAt, sameCountry, RANKS, RANK_LABEL, defaultGameRank, rankOf, officialsSettings } from "../officials/model.js";
+import { checkAssignments, cellLevel, SLOT_LABEL, refsOnLines } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
 import AutoAssignModal from "./AutoAssignModal.jsx";
 
-const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["a1", "Assistant 1"], ["a2", "Assistant 2"], ["cm", "Court manager"]];
+const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["clerk2", "Clerk 2"], ["a1", "Assistant 1"], ["a2", "Assistant 2"], ["cm", "Court manager"]];
 const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); return new Date(2000 + (y || 0), (m || 1) - 1, d || 1); };
 const dayLabel = (s) => { const dt = parseDate(s); return `${dt.toLocaleDateString("en-US", { weekday: "short" })} ${dt.getDate()} ${dt.toLocaleDateString("en-US", { month: "short" })}`; };
 const refName = (r) => [r.first, r.name].filter(Boolean).join(" ").trim();
@@ -47,7 +47,11 @@ export default function Referees() {
   // including unsaved edits. See src/officials/rules.js.
   const merged = useMemo(() => games.map((g) => (local[g.id] || localAuto[g.id]
     ? { ...g, refs: local[g.id] || g.refs, refsAuto: localAuto[g.id] || g.refsAuto } : g)), [games, local, localAuto]);
-  const check = useMemo(() => checkAssignments(merged, refs, event?.entries || []), [merged, refs, event]);
+  const settings = useMemo(() => officialsSettings(event), [event]);
+  const check = useMemo(() => checkAssignments(merged, refs, event?.entries || [], settings), [merged, refs, event, settings]);
+  // Clerk 2 column only when some court has a second clerk (or one is set).
+  const cols = ROLES.filter(([k]) => k !== "clerk2" || settings.clerk2Courts.length || merged.some((g) => String(g.refs?.clerk2 ?? "").trim()));
+  const courts = useMemo(() => [...new Set(games.map((g) => String(g.court ?? "")).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [games]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     return games
@@ -94,6 +98,14 @@ export default function Referees() {
   // (ch = width of "0"; names in a proportional font run ~15% wider, plus the
   // flag and the select's arrow.)
   const pickerWidth = `calc(${(Math.max(12, ...sortedRefs.map((o) => refName(o).length)) * 1.15 + 3).toFixed(1)}ch + 40px)`;
+  // Games per official, per day and in total (picker hint "2 today · 5 total").
+  const loadOf = new Map(); // name → { total, [date]: n }
+  for (const x of merged) for (const [k] of ROLES) {
+    const n = String(x.refs?.[k] ?? "").trim().toLowerCase();
+    if (!n) continue;
+    const l = loadOf.get(n) || loadOf.set(n, { total: 0 }).get(n);
+    l.total++; l[x.date] = (l[x.date] || 0) + 1;
+  }
   const officialPicker = (g, k, placeholder) => {
     const v = String(valOf(g, k)).trim();
     const known = sortedRefs.find((o) => refName(o).toLowerCase() === v.toLowerCase());
@@ -105,13 +117,18 @@ export default function Referees() {
       // Court manager on other courts at the same time is fine (only for the court manager slot).
       const other = (busyAt.get(`${g.date}|${g.time}`)?.get(lower) || []).filter((x) => x.nr !== g.nr && !(k === "cm" && x.slot === "cm")).map((x) => x.nr);
       if (other.length) hints.push(`busy (#${other.join(", #")})`);
-      if (!availableAt(o, g.date, g.time)) hints.push("away");
+      if (!availableAt(o, g.date, g.time, settings.gameMinutes)) hints.push("away");
       if ((k === "r1" || k === "r2") && o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country))) hints.push("own nation");
       if ((k === "r1" || k === "r2") && rankOf(o) !== "normal") hints.unshift(RANK_LABEL[rankOf(o)].toLowerCase());
+      const l = loadOf.get(lower);
+      hints.push(`${l?.[g.date] || 0} today · ${l?.total || 0} total`);
       return `${flagFor(o.country)} ${n}${hints.length ? " — " + hints.join(", ") : ""}`.trim();
     };
     const text = (o) => (refName(o) === value ? `${flagFor(o.country)} ${refName(o)}`.trim() : label(o));
-    const fits = sortedRefs.filter((o) => canFill(o, k)), others = sortedRefs.filter((o) => !canFill(o, k));
+    // In the final (event setting) the referees work the lines.
+    const finalLines = (k === "a1" || k === "a2") && refsOnLines(g, settings);
+    const fitsSlot = (o) => (finalLines ? rolesOf(o).includes("referee") : canFill(o, k));
+    const fits = sortedRefs.filter(fitsSlot), others = sortedRefs.filter((o) => !fitsSlot(o));
     const pick = (e) => {
       if (e.target.value !== "__other__") { setVal(g, k, e.target.value); return; }
       const n = prompt("Name of the official (not in the registry):", value);
@@ -121,7 +138,7 @@ export default function Referees() {
       <select className="ref-input" style={{ width: pickerWidth }} value={value} disabled={archived} onChange={pick} aria-label={`${ROLES.find(([s]) => s === k)[1]} of game ${g.nr}`}>
         <option value="">{placeholder}</option>
         {v && !known && <option value={v}>{v} (not in the registry)</option>}
-        <optgroup label={`${ROLE_LABEL[SLOT_ROLE[k]]}s`}>{fits.map((o) => <option key={o.id} value={refName(o)}>{text(o)}</option>)}</optgroup>
+        <optgroup label={finalLines ? "Referees (final: referees work the lines)" : `${ROLE_LABEL[SLOT_ROLE[k]]}s`}>{fits.map((o) => <option key={o.id} value={refName(o)}>{text(o)}</option>)}</optgroup>
         {others.length > 0 && <optgroup label="Other officials">{others.map((o) => <option key={o.id} value={refName(o)}>{text(o)}</option>)}</optgroup>}
         <option value={"__other__"}>Other name…</option>
       </select>
@@ -188,7 +205,8 @@ export default function Referees() {
           <button className="btn sm" onClick={() => clearAssignments(false)} title={`Remove all officials (${day === "all" ? "all days" : dayLabel(day)})`}>Clear all…</button>
         </div>
       )}
-      {autoOpen && <AutoAssignModal games={merged} refs={refs} entries={event?.entries || []} days={days} day={day} dayLabel={dayLabel} onApply={applyProposal} onClose={() => setAutoOpen(false)} />}
+      <AssignSettings settings={settings} courts={courts} archived={archived} />
+      {autoOpen && <AutoAssignModal games={merged} refs={refs} entries={event?.entries || []} rules={settings} days={days} day={day} dayLabel={dayLabel} onApply={applyProposal} onClose={() => setAutoOpen(false)} />}
       <LoadOverview games={merged} days={days} dayLabel={dayLabel} />
       <IssueSummary check={check} games={games} day={day} showList={showList} setShowList={setShowList}
         issuesOnly={issuesOnly} setIssuesOnly={setIssuesOnly} onPick={(g) => { setDay("all"); setQ(String(g.nr)); }} />
@@ -199,11 +217,11 @@ export default function Referees() {
           <thead>
             <tr>
               <th className="rg-game">Game</th>
-              {ROLES.map(([k, label]) => <th key={k}>{label}</th>)}
+              {cols.map(([k, label]) => <th key={k}>{label}</th>)}
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="muted-sm" colSpan={6}>No games.</td></tr>}
+            {shown.length === 0 && <tr><td className="muted-sm" colSpan={cols.length + 1}>No games.</td></tr>}
             {shown.map((g) => (
               <tr key={g.id} className={saved[g.id] ? "rg-saved" : ""}>
                 <td className="rg-game" onClick={() => nav(`/e/${eventId}/game/${g.id}`)} title="Open game report">
@@ -229,7 +247,7 @@ export default function Referees() {
                     })()}
                   </div>
                 </td>
-                {ROLES.map(([k]) => {
+                {cols.map(([k]) => {
                   const iss = check.cells[g.id]?.[k];
                   const lvl = cellLevel(iss);
                   const empty = !String(valOf(g, k)).trim();
@@ -285,7 +303,7 @@ function IssueSummary({ check, games, day, showList, setShowList, issuesOnly, se
 
 // Games per official per day, split by role (referee 1/2, assistant 1/2,
 // clerk), to spot an uneven load at a glance.
-const ROLE_OF = { r1: "referee", r2: "referee", a1: "assistant", a2: "assistant", clerk: "clerk", cm: "courtManager" };
+const ROLE_OF = { r1: "referee", r2: "referee", a1: "assistant", a2: "assistant", clerk: "clerk", clerk2: "clerk", cm: "courtManager" };
 function LoadOverview({ games, days, dayLabel }) {
   const rows = useMemo(() => {
     const m = new Map();
@@ -313,6 +331,37 @@ function LoadOverview({ games, days, dayLabel }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </details>
+  );
+}
+
+// Event settings for the assignment (event.officialsRules, see
+// officials/model.js officialsSettings). Saved right away.
+function AssignSettings({ settings, courts, archived }) {
+  const save = (patch) => {
+    const next = { r2: settings.r2, clerk2Courts: settings.clerk2Courts, finalRefsOnLines: settings.finalRefsOnLines, ...patch };
+    updateEventFields({ officialsRules: next }).catch((e) => alert("Could not save: " + (e?.code || e?.message || e)));
+  };
+  const toggleCourt = (c) => save({ clerk2Courts: settings.clerk2Courts.includes(c) ? settings.clerk2Courts.filter((x) => x !== c) : [...settings.clerk2Courts, c] });
+  return (
+    <details className="adv-tool" style={{ marginBottom: 10 }}>
+      <summary>Assignment settings — Referee 2: {settings.r2 === "finals" ? "finals only" : "every game"}{settings.clerk2Courts.length ? ` · Clerk 2 on court ${settings.clerk2Courts.join(", ")}` : ""}</summary>
+      <div className="as-settings">
+        <label>Referee 2{" "}
+          <select value={settings.r2} disabled={archived} onChange={(e) => save({ r2: e.target.value })}>
+            <option value="always">in every game</option>
+            <option value="finals">only semifinals, bronze / 3rd place and final</option>
+          </select>
+          <span className="muted-sm"> — elsewhere you can still add one by hand.</span>
+        </label>
+        <div>Second clerk on courts:{" "}
+          {courts.length ? courts.map((c) => (
+            <label key={c} className="as-court"><input type="checkbox" checked={settings.clerk2Courts.includes(c)} disabled={archived} onChange={() => toggleCourt(c)} /> {c}</label>
+          )) : <span className="muted-sm">no games yet</span>}
+        </div>
+        <label><input type="checkbox" checked={settings.finalRefsOnLines} disabled={archived} onChange={(e) => save({ finalRefsOnLines: e.target.checked })} /> In the final, the referees work the lines</label>
+        <p className="muted-sm">Availability windows use a game length of {settings.gameMinutes} min (Settings → Courts &amp; schedule).</p>
       </div>
     </details>
   );
