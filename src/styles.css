@@ -950,3 +950,9 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .kit-teams .kit-n { font-weight: 700; color: var(--muted); font-size: 12px; margin-right: 2px; }
 .kit-sel { min-height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; background: #fff; font-size: 13px; margin-left: 6px; }
 .kit-teams .kit-sec th { text-align: left; background: var(--surface-2, #f3f5f9); font-size: 13px; padding: 8px 10px; }
+.fmt-group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 4px 0 10px; }
+.fmt-group { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; }
+.fmt-group-h { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.fmt-group-team { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 2px 0; }
+.fmt-group-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmt-group-team select { padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); font-size: 12px; }

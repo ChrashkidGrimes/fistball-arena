@@ -23,9 +23,22 @@ function isPlaceholder(name) {
 export function resolveAdvancement(games, resultsById, teamCount) {
   const qrResults = games.filter((g) => g.phase === "group").map((g) => resultsById[g.id]).filter(Boolean);
   const ranking = groupComplete(qrResults, teamCount) ? rankGroup(qrResults) : null;
+  // Several groups: each seed names its group ({ group:"A", rank:1 }), ranked
+  // once that group's round-robin is complete.
+  const groupRankings = {};
+  const rankingOf = (label) => {
+    if (!(label in groupRankings)) {
+      const gg = games.filter((g) => g.phase === "group" && g.group === label);
+      const teams = new Set(gg.flatMap((g) => [g.teamA, g.teamB]).filter(Boolean));
+      const res = gg.map((g) => resultsById[g.id]).filter(Boolean);
+      groupRankings[label] = groupComplete(res, teams.size) ? rankGroup(res) : null;
+    }
+    return groupRankings[label];
+  };
 
   const resolve = (src) => {
     if (!src) return null;
+    if (src.type === "seed" && src.group) { const r = rankingOf(src.group); return r ? r[src.rank - 1] || null : null; }
     if (src.type === "seed") return ranking ? ranking[src.rank - 1] || null : null;
     if (src.type === "winner") return winnerOf(resultsById[src.game || src.dep]);
     if (src.type === "loser") return loserOf(resultsById[src.game || src.dep]);

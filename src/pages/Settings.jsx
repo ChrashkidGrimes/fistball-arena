@@ -5,7 +5,7 @@ import {
   subscribeLogos, addLogo, deleteLogo, subscribeTeamLogos, setTeamLogo, saveBranding, updateEventDetails, updateEventFields, publishGames, resetScores, saveScoringRules, subscribeGames,
 } from "../cloud.js";
 import { TYPES, COMMON_AGES, expandBuilder, buildColumns, sexWord } from "../categories.js";
-import { describeFormat, formatMatches, formatWarnings, slotOptions, parseSlot, slotValue, normalizeOverride, ROUND_OPTIONS } from "../schedule/format.js";
+import { assignGroups, describeGroupFormat, QUALIFIER_OPTIONS, describeFormat, formatMatches, formatWarnings, slotOptions, parseSlot, slotValue, normalizeOverride, ROUND_OPTIONS } from "../schedule/format.js";
 import SlotsEditor from "../schedule/SlotsEditor.jsx";
 import { generateSchedule } from "../schedule/generator.js";
 import { eventToConfig } from "../schedule/eventToConfig.js";
@@ -132,6 +132,14 @@ export default function Settings({ me }) {
     const fv = { ...(details.formatVariants || {}), [cat]: { ...(details.formatVariants?.[cat] || {}), ...patch } };
     edit((d) => ({ ...d, formatVariants: fv }));
     updateEventFields({ formatVariants: fv }).catch((e) => setStatus("Save failed: " + (e?.message || e)));
+  };
+
+  // Several groups per category: count, team → group, qualifiers, placements.
+  const setGroupCount = (cat, n) => setVariantField(cat, { groups: n, groupOf: {}, qualifiers: null });
+  const moveTeam = (cat, groups, teamName, label) => {
+    const groupOf = Object.fromEntries(groups.flatMap((g) => g.teams.map((t) => [t, g.label])));
+    groupOf[teamName] = label;
+    setVariantField(cat, { groupOf });
   };
 
   const cb = details.categoryBuilder;
@@ -497,7 +505,7 @@ export default function Settings({ me }) {
         {/* ---- 4. Format per category (auto by team count) ---- */}
         <Step n={4} title="Format" sub={done[3] ? `${previewCats.length} categories` : ""} done={done[3]} locked={locked[3]} open={openStep === 4} onToggle={() => openOrToggle(4)}>
           <div>
-            <p className="muted-sm">Pick a format for each category. The number of teams comes from the matrix; “View bracket” fine-tunes the knockout matchups.</p>
+            <p className="muted-sm">Pick a format for each category. The number of teams comes from the matrix. Split a category into groups (e.g. 2 groups of 6) — each group plays round-robin and the best cross into the knockout. With one group, “View bracket” fine-tunes the knockout matchups.</p>
             {previewCats.length > 0 && (
               <button className="btn" style={{ marginBottom: 10 }} onClick={() => setBracketIdx(0)}>👁 Review each bracket →</button>
             )}
@@ -506,11 +514,16 @@ export default function Settings({ me }) {
               const v = details.formatVariants?.[cat];
               const flags = { double: !!v?.double, knockout: v?.knockout !== false };
               const d = describeFormat(count, details.formatOverrides?.[cat], flags);
+              const groups = assignGroups(teamsInCat(cat), v?.groups, v?.groupOf || {});
+              const nGroups = groups.length;
+              const gd = nGroups > 1 ? describeGroupFormat(groups, { ...flags, qualifiers: v?.qualifiers, placements: v?.placements !== false }) : null;
+              const minSize = Math.min(...groups.map((g) => g.teams.length));
+              const hasQF = gd && gd.rounds.some((r) => /quarterfinal/i.test(r.round));
               return (
                 <div className="fmt-cat" key={cat}>
                   <div className="fmt-head"><b>{cat}</b><span className="tag">{count} team{count === 1 ? "" : "s"}</span>
-                    {count > 0 && d && flags.knockout && formatWarnings(count, details.formatOverrides?.[cat]).length > 0 && <span className="tag" style={{ background: "#fff4e5", color: "#8a5a00" }}>⚠️ check</span>}
-                    {count > 0 && d && flags.knockout && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setBracketIdx(ci)}>View bracket</button>}
+                    {nGroups === 1 && count > 0 && d && flags.knockout && formatWarnings(count, details.formatOverrides?.[cat]).length > 0 && <span className="tag" style={{ background: "#fff4e5", color: "#8a5a00" }}>⚠️ check</span>}
+                    {nGroups === 1 && count > 0 && d && flags.knockout && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setBracketIdx(ci)}>View bracket</button>}
                   </div>
                   {count > 0 && (
                     <>
@@ -531,10 +544,56 @@ export default function Settings({ me }) {
                           </label>
                         )}
                       </div>
+                      <div className="fmt-bestof">
+                        <label>Groups
+                          <select value={nGroups} disabled={archived || count < 4} onChange={(e) => setGroupCount(cat, Number(e.target.value))}>
+                            {Array.from({ length: Math.max(1, Math.min(8, Math.floor(count / 2))) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n === 1 ? "1 (all play all)" : n}</option>)}
+                          </select>
+                        </label>
+                        {gd && flags.knockout && (QUALIFIER_OPTIONS[nGroups] || []).length > 0 && (
+                          <label>Qualify per group
+                            <select value={gd.qualifiers} disabled={archived} onChange={(e) => setVariantField(cat, { qualifiers: Number(e.target.value) })}>
+                              {QUALIFIER_OPTIONS[nGroups].filter((q) => q <= minSize).map((q) => <option key={q} value={q}>{q}</option>)}
+                            </select>
+                          </label>
+                        )}
+                        {gd && flags.knockout && hasQF && (
+                          <label><input type="checkbox" checked={v?.placements !== false} disabled={archived} onChange={(e) => setVariantField(cat, { placements: e.target.checked })} /> Placement games for quarterfinal losers</label>
+                        )}
+                      </div>
+                      {gd && (
+                        <div className="fmt-group-grid">
+                          {groups.map((g) => (
+                            <div className="fmt-group" key={g.label}>
+                              <div className="fmt-group-h">Group {g.label} <span className="muted-sm">· {g.teams.length} teams</span></div>
+                              {g.teams.map((t) => (
+                                <div className="fmt-group-team" key={t}>
+                                  <span className="flag">{flagFor(t)}</span><span className="fmt-group-name">{t}</span>
+                                  <select value={g.label} disabled={archived} onChange={(e) => moveTeam(cat, groups, t, e.target.value)} aria-label={`Group for ${t}`}>
+                                    {groups.map((x) => <option key={x.label} value={x.label}>{x.label}</option>)}
+                                  </select>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </>
                   )}
                   {!count ? (
                     <p className="muted-sm" style={{ margin: "2px 0 0" }}>No teams ticked yet.</p>
+                  ) : gd ? (
+                    <>
+                      {gd.groups.map((g) => (
+                        <div className="fmt-line" key={g.label}><span className="fmt-round">Group {g.label}</span> {g.teams} teams · {flags.double ? "double round-robin" : "round-robin"} · {g.games} games</div>
+                      ))}
+                      {gd.rounds.map((r, i) => (
+                        <div className="fmt-line" key={i}><span className="fmt-round">{r.round}</span> {r.matches.join(" · ")}</div>
+                      ))}
+                      {flags.knockout && !gd.koSupported && <div className="fmt-line muted-sm">No automatic knockout for {nGroups} groups — use 2, 4 or 8 groups, or a “round-robin only” variant.</div>}
+                      {!flags.knockout && <div className="fmt-line muted-sm">No playoffs — final standings from the groups.</div>}
+                      <div className="muted-sm" style={{ marginTop: 4 }}>Total <b>{gd.total}</b> games · group best of {Number(v?.bestOf) || 3}{flags.knockout ? ` · finals best of ${Number(v?.bestOfKo) || Number(v?.bestOf) || 3}` : ""}</div>
+                    </>
                   ) : d ? (
                     <>
                       <div className="fmt-line"><span className="fmt-round">Qualification Round</span> one group · {flags.double ? "double round-robin" : "round-robin"} · {d.qrGames} games</div>
@@ -545,7 +604,7 @@ export default function Settings({ me }) {
                       <div className="muted-sm" style={{ marginTop: 4 }}>Total <b>{d.total}</b> games · group best of {Number(v?.bestOf) || 3}{flags.knockout ? ` · finals best of ${Number(v?.bestOfKo) || Number(v?.bestOf) || 3}` : ""}</div>
                     </>
                   ) : (
-                    <p className="muted-sm" style={{ margin: "2px 0 0" }}>No knockout preset for {count} teams yet — pick a “round-robin only” variant, or a manual bracket will be needed.</p>
+                    <p className="muted-sm" style={{ margin: "2px 0 0" }}>No knockout preset for {count} teams in one group — split them into groups above, or pick a “round-robin only” variant.</p>
                   )}
                 </div>
               );
@@ -722,6 +781,7 @@ export default function Settings({ me }) {
         <BracketModal
           category={previewCats[bracketIdx]}
           teams={teamsInCat(previewCats[bracketIdx])}
+          grouped={(Number(details.formatVariants?.[previewCats[bracketIdx]]?.groups) || 1) > 1}
           override={details.formatOverrides?.[previewCats[bracketIdx]]}
           onSlot={(matchId, slot, value, isAdded) => setSlot(previewCats[bracketIdx], matchId, slot, value, isAdded)}
           onRound={(matchId, round) => setRound(previewCats[bracketIdx], matchId, round)}
@@ -802,7 +862,7 @@ function BroadcastLinks({ eventId, games }) {
   );
 }
 
-function BracketModal({ category, teams, override, onSlot, onRound, onAdd, onRemove, onReset, onSave, archived, idx, total, onClose, onNext }) {
+function BracketModal({ category, teams, grouped, override, onSlot, onRound, onAdd, onRemove, onReset, onSave, archived, idx, total, onClose, onNext }) {
   const n = teams.length;
   const matches = formatMatches(n, override);
   const warnings = formatWarnings(n, override);
@@ -822,7 +882,9 @@ function BracketModal({ category, teams, override, onSlot, onRound, onAdd, onRem
         <button className="modal-x" onClick={onClose} aria-label="Close">✕</button>
         <h3 className="modal-title" style={{ marginBottom: 2 }}>{category}</h3>
         <p className="muted-sm" style={{ marginTop: 0 }}>{n} teams · category {idx + 1} of {total}</p>
-        {!matches.length ? (
+        {grouped ? (
+          <p className="muted-sm">This category is split into groups — its group stage and cross-over knockout are shown in the Format step.</p>
+        ) : !matches.length ? (
           <p className="muted-sm">No preset for {n} teams yet.</p>
         ) : (
           <>

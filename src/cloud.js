@@ -386,7 +386,7 @@ function slotPlaceholder(src, gamesById) {
   if (src.type === "seed") {
     const n = Number(src.rank) || 0;
     const suf = n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th";
-    return `${n}${suf}`;
+    return src.group ? `${n}${suf} Group ${src.group}` : `${n}${suf}`;
   }
   const round = gamesById[src.game || src.dep]?.round;
   if (!round) return null;
@@ -984,7 +984,7 @@ async function advanceCategory(category, allGames, allRes) {
     if (g.teamB?.name) qrTeams.add(g.teamB.name);
   });
   const shaped = games.map((g) => ({
-    id: g.id, category: g.category, phase: g.round === "Qualification round" ? "group" : "ko",
+    id: g.id, category: g.category, phase: g.round === "Qualification round" ? "group" : "ko", group: g.group || "",
     round: g.round, teamA: g.teamA?.name, teamB: g.teamB?.name, srcA: g.srcA, srcB: g.srcB,
   }));
   const patches = resolveAdvancement(shaped, resultsById, qrTeams.size);
