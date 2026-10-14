@@ -31,14 +31,18 @@ export function normalizeSlots(s) {
   }
   return {
     courts: (s.courts || []).map(String),
-    days: days.map((d) => ({ date: d.date, start: d.start || "09:00", end: d.end || "18:00" })),
+    // A day may override the game duration (e.g. finals day, all best of 5).
+    days: days.map((d) => ({ date: d.date, start: d.start || "09:00", end: d.end || "18:00", ...(Number(d.gameMinutes) > 0 ? { gameMinutes: Number(d.gameMinutes) } : {}) })),
     gameMinutes, breakMinutes,
   };
 }
 
+// Game duration on a given day: its own override, else the event default.
+export const dayGameMinutes = (day, gameMinutes) => Number(day?.gameMinutes) || Number(gameMinutes) || 45;
+
 // Slots that fit in one day for one court (given the window and slot step).
 export function slotsPerDay(day, gameMinutes, breakMinutes) {
-  const step = Math.max(5, Number(gameMinutes || 45) + Number(breakMinutes || 0));
+  const step = Math.max(5, dayGameMinutes(day, gameMinutes) + Number(breakMinutes || 0));
   return Math.max(0, Math.floor((toMinutes(day.end) - toMinutes(day.start)) / step));
 }
 
@@ -54,7 +58,6 @@ function orderFixtures(fixtures) {
 export function allocate(fixtures, slotConfig) {
   const cfg = normalizeSlots(slotConfig);
   const { courts, days, gameMinutes, breakMinutes } = cfg;
-  const step = Math.max(5, gameMinutes + breakMinutes);
   const warnings = [];
 
   // Enumerate cells: each day's window → slots × courts. `global` keeps a big
@@ -63,6 +66,7 @@ export function allocate(fixtures, slotConfig) {
   let capacity = 0;
   days.forEach((day, d) => {
     const s0 = toMinutes(day.start);
+    const step = Math.max(5, dayGameMinutes(day, gameMinutes) + breakMinutes);
     const n = slotsPerDay(day, gameMinutes, breakMinutes);
     capacity += n * courts.length;
     for (let s = 0; s < n; s++) for (let c = 0; c < courts.length; c++) {
