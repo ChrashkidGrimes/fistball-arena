@@ -7,6 +7,22 @@
 
 const KO_RANK = { qf: 0, sf: 1, bronze: 2, final: 3 };
 
+// Phases a day can be limited to (Courts & schedule → per day). A day with no
+// phases ticked takes any game.
+export const DAY_PHASES = [
+  ["group", "Groups"], ["qf", "Quarterfinals"], ["placement", "Placements"],
+  ["sf", "Semifinals"], ["bronze", "Bronze"], ["final", "Final"],
+];
+export function phaseOf(f) {
+  if (f.phase === "group" || /qualification/i.test(f.round || "")) return "group";
+  const r = String(f.round || "");
+  if (/gold|^final/i.test(r)) return "final";
+  if (/bronze/i.test(r)) return "bronze";
+  if (/semi/i.test(r)) return "sf";
+  if (/quarter|play-?off/i.test(r)) return "qf";
+  return "placement";
+}
+
 function isPlaceholder(name) { return /\d/.test(name) || /(winner|loser)/i.test(name); }
 function realTeamKeys(f) {
   const keys = [];
@@ -32,7 +48,11 @@ export function normalizeSlots(s) {
   return {
     courts: (s.courts || []).map(String),
     // A day may override the game duration (e.g. finals day, all best of 5).
-    days: days.map((d) => ({ date: d.date, start: d.start || "09:00", end: d.end || "18:00", ...(Number(d.gameMinutes) > 0 ? { gameMinutes: Number(d.gameMinutes) } : {}) })),
+    days: days.map((d) => ({
+      date: d.date, start: d.start || "09:00", end: d.end || "18:00",
+      ...(Number(d.gameMinutes) > 0 ? { gameMinutes: Number(d.gameMinutes) } : {}),
+      ...(Array.isArray(d.phases) && d.phases.length ? { phases: d.phases } : {}),
+    })),
     gameMinutes, breakMinutes,
   };
 }
@@ -88,12 +108,15 @@ export function allocate(fixtures, slotConfig) {
   const unplaced = [];
   let lastGroupGlobal = -1;
   let restViolations = 0;
+  let offPhase = 0;
   const busyAt = (g) => busy.get(g) || busy.set(g, new Set()).get(g);
   const playedOf = (k) => played.get(k) || played.set(k, new Set()).get(k);
 
-  function findCell(keys, floor, requireRest) {
+  function findCell(keys, floor, requireRest, phase) {
     for (const cell of cells) {
       if (cell.global < floor) continue;
+      const allowed = days[cell.d].phases;
+      if (phase && allowed && !allowed.includes(phase)) continue;
       const ck = `${cell.global}|${cell.c}`;
       if (cellUsed.has(ck)) continue;
       const slotTeams = busy.get(cell.global);
@@ -113,8 +136,11 @@ export function allocate(fixtures, slotConfig) {
     for (const dep of f.deps || []) if (placedAt.has(dep)) floor = Math.max(floor, placedAt.get(dep) + 1);
     if (f.phase === "ko") floor = Math.max(floor, lastGroupGlobal + 1);
 
-    let cell = findCell(keys, floor, true);
-    if (!cell) { cell = findCell(keys, floor, false); if (cell) restViolations++; }
+    // Respect the days' phase limits; only if impossible, place it anywhere.
+    const phase = phaseOf(f);
+    let cell = findCell(keys, floor, true, phase);
+    if (!cell) { cell = findCell(keys, floor, false, phase); if (cell) restViolations++; }
+    if (!cell) { cell = findCell(keys, floor, true) || findCell(keys, floor, false); if (cell) offPhase++; }
     if (!cell) { unplaced.push(f); continue; }
 
     cellUsed.add(`${cell.global}|${cell.c}`);
@@ -128,6 +154,7 @@ export function allocate(fixtures, slotConfig) {
     });
   }
 
+  if (offPhase > 0) warnings.push(`${offPhase} match(es) didn't fit on a day allowed for their phase and were placed on another day. Check the phases ticked per day.`);
   if (restViolations > 0) warnings.push(`${restViolations} match(es) had to be scheduled back-to-back for a team. Add slots or a court for more rest.`);
   if (unplaced.length > 0) warnings.push(`${unplaced.length} match(es) could not be placed under the constraints. Add slots or a court.`);
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { normalizeSlots, slotsPerDay } from "./scheduler.js";
+import { normalizeSlots, slotsPerDay, DAY_PHASES } from "./scheduler.js";
 
 const toISO = (s) => { const [d, m, y] = String(s).split("/"); return d ? `20${y}-${m}-${d}` : ""; };
 const fromISO = (iso) => { const [y, m, d] = String(iso).split("-"); return d ? `${d}/${m}/${y.slice(2)}` : ""; };
@@ -21,6 +21,13 @@ export default function SlotsEditor({ value, onChange, disabled }) {
     if (j !== i) return d;
     const { gameMinutes: _, ...rest } = d;
     return Number(v) > 0 ? { ...rest, gameMinutes: Number(v) } : rest;
+  }) });
+  const togglePhase = (i, p) => set({ days: s.days.map((d, j) => {
+    if (j !== i) return d;
+    const cur = d.phases || [];
+    const { phases: _, ...rest } = d;
+    const next = cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p];
+    return next.length ? { ...rest, phases: next } : rest;
   }) });
   const removeDay = (i) => set({ days: s.days.filter((_, j) => j !== i) });
 
@@ -56,6 +63,12 @@ export default function SlotsEditor({ value, onChange, disabled }) {
             onChange={(e) => setDayMinutes(i, e.target.value)} aria-label={`Game duration on ${d.date} (minutes)`} /> min</label>
           <span className="slot-cap">~{perDay(d)} games</span>
           {!disabled && <button className="btn danger sm" onClick={() => removeDay(i)}>✕</button>}
+          <div className="slot-phases" role="group" aria-label={`Phases on ${d.date}`}>
+            {DAY_PHASES.map(([k, label]) => (
+              <button key={k} type="button" disabled={disabled} className={`filter-pill ${(d.phases || []).includes(k) ? "active" : ""}`} onClick={() => togglePhase(i, k)}>{label}</button>
+            ))}
+            {!(d.phases || []).length && <span className="muted-sm">any phase</span>}
+          </div>
         </div>
       ))}
       {!s.days.length && <p className="muted-sm">No days yet — add one below.</p>}
@@ -72,7 +85,7 @@ export default function SlotsEditor({ value, onChange, disabled }) {
         <label className="field"><span>Break between games (min)</span>
           <input type="number" min="0" step="5" disabled={disabled} value={s.breakMinutes} onChange={(e) => set({ breakMinutes: Number(e.target.value) })} /></label>
       </div>
-      <p className="muted-sm">Each day can have its own game duration (e.g. a finals day with best of 5); leave it empty to use the default. Max games/day = the day’s window ÷ (duration + break) × courts.</p>
+      <p className="muted-sm">Tick the phases a day is for (e.g. groups on the first days, semifinals and finals on the last) — the generator only places those games there; no phase ticked = any game. Each day can have its own game duration (e.g. a finals day with best of 5); leave it empty to use the default. Max games/day = the day’s window ÷ (duration + break) × courts.</p>
     </div>
   );
 }
