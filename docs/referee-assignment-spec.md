@@ -72,10 +72,10 @@ Add (all optional, backwards compatible):
   club: "Ahlhorner SV",         // club (EFA/club events) — conflict check vs teams
   gender: "f" | "m",
   assistantPair: "pair-3",      // optional id; two people with the same id are assistant partners (picked as partner in the app)
-  rank: "top" | "good" | "normal", // referees only; missing = normal (see 3.4b)
+  rank: "top" | "good" | "normal", // referees and assistants; missing = normal (see 3.4b)
   availability: {               // by date ("dd/mm/yy", as on games); missing date = available
     "12/09/26": { status: "available" | "reserve" | "unavailable",
-                  slots: ["10:30", "11:45"] }   // optional whitelist of start times
+                  from: "12:00", to: "15:00" }  // optional window; the whole game must fit
   },
   maxPerDay: 6                  // optional load cap
 }
@@ -115,28 +115,32 @@ import can follow later.
 
 1. **Country conflict**: official's `country` equals either team's country.
    Hard for `r1` in every game and for `r2` in group-stage games. For `r2` in
-   knockout games see the exception in 3.2. Does **not** apply to `clerk` or
+   knockout games see the exception in 3.2. In **club competitions**
+   (category "Clubs …") the nation of a club is only a strong soft penalty
+   for referees (above breaks), see 3.2. Does **not** apply to `clerk` or
    to line judges (`a1`, `a2`): their nation plays no role in the assignment —
    except for a referee filling a line judge slot (see 3.2).
 2. **Club conflict**: official's `club` equals either team's club
    (e.g. Ahlhorner SV members cannot referee Ahlhorner SV games). Hard for
-   `r1`/`r2` only. For line judges it is a soft rule (avoid if possible, see
-   3.2); for `clerk` the club plays no role.
+   referees, assistants **and clerks** (as in the Ahlhorn tool, 2026-10-14);
+   court managers are not affected.
 3. **Unavailable**: availability status `unavailable` for that date, or the
-   game's start time is not in the person's `slots` whitelist.
+   game (start + game length) doesn't fit into the day's window `from`–`to`.
 4. **Double booking**: same person in two games whose time windows overlap,
    or twice in the same game.
 8. **Too many games in a row**: more than **two** consecutive rounds
    (Durchgänge) on the same day without a free round in between. A round is
    one start time of the day (all courts); consecutive = adjacent start times
-   of that day's schedule.
+   of that day's schedule. **Clerks and court managers are exempt** — clerks
+   may work game after game (stable table crews, see 3.4c).
 5. **Role not allowed**: person lacks the role for that slot (`roles`).
 6. **Women's finals gender rule**: in women's semifinals, bronze and final,
    at least one of `r1`/`r2` must be female.
-7. **Mandatory slots**: `r1`, `r2` are mandatory. `a1`/`a2` (assistants) mandatory when
-   an assistant pool exists. `clerk` (the single scorer slot) is **optional**
-   unless the clerk pool is non-empty (at club events teams provide their own
-   scorers).
+7. **Mandatory slots**: `r1` is mandatory; `r2` in every game or only in
+   semifinals / bronze / final (event setting, 3.4c). `a1`/`a2` (assistants)
+   mandatory when an assistant pool exists. `clerk` is **optional** unless the
+   clerk pool is non-empty (at club events teams provide their own scorers);
+   `clerk2` additionally only on the courts set for a second clerk.
 
 Hard rules are hard blocks, not warnings — this is a firm design principle.
 
@@ -158,9 +162,10 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
   free round after every game; two in a row are allowed but penalised, a
   third in a row is a hard violation (3.1 rule 8). Both limits configurable
   (default: soft at 2, hard at 3).
-- **Line judge from a playing club**: `a1`/`a2` whose `club` equals either
-  team's club → orange warning and penalty (avoided whenever another line
-  judge or pair is eligible).
+- **Referee from a club's nation (club competitions)**: strong penalty,
+  above breaks; used only when no other referee fits.
+- **Final: assistants who aren't referees**: when the referees work the lines
+  in the final (event setting), a pure assistant there is a warning.
 - **Load imbalance**: deviation from the average number of games per person
   (per role, per day and overall); also `maxPerDay` exceeded.
 - **Repeat pairing / repeat team**: same official seeing the same team many
@@ -204,6 +209,32 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
   rule — if no fitting referee is free, a lower-ranked one is used.
 - A referee (1 or 2) above the game's rank costs a small penalty per level
   (`w_rankOver`), so top referees stay free for top games when it matters.
+
+### 3.4c Event settings and rules from the Reiden / Ahlhorn tools (2026-10-14)
+
+Event settings (`event.officialsRules`, Referees page → "Assignment settings"):
+
+- **`r2`**: `"always"` (default) or `"finals"` — Referee 2 only in semifinals,
+  bronze / 3rd place and the final; elsewhere optional, by hand.
+- **`clerk2Courts`**: courts with a second clerk (slot `clerk2`, "Clerk 2").
+- **`finalRefsOnLines`** (default on): in the final (gold medal game) the
+  referees work the lines; auto-assign takes the assistants only from the
+  referees, the assistant pool stays out.
+- Game length for the availability windows: `event.slots.gameMinutes`.
+
+Further rules:
+
+- **Clerks** may work game after game (no break rule) and keep their court:
+  a clerk working on in the next round on another court costs a small
+  penalty (`w_clerkCourtSwitch`, ≈ 1.5 games of load).
+- **Ranks for assistants** too: an assistant below the game's rank costs
+  `w_rankUnder` per level (no warning shown); with a big enough gap the rank
+  beats keeping a pair together.
+- **Team spread** for referees: `w_repeat` per earlier game with one of the
+  teams (≈ 0.6 games of load).
+- **Assistant crews** take part in the local improvement: whole crews
+  (`a1` + `a2`) are swapped between games of the same day.
+- The slot picker shows each official's games today / in total.
 
 ### 3.5 Scoring
 
