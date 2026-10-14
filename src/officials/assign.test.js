@@ -205,3 +205,63 @@ test("court manager: one per round covers all courts; rounds are spread evenly",
   assert.deepEqual(Object.values(rounds).sort(), [2, 2]);
   assert.equal(res.after.counts.hard, 0);
 });
+
+test("event settings: Referee 2 only in the finals rounds, Clerk 2 only on chosen courts", () => {
+  const as = (first) => ({ first, name: "Clerk", roles: ["clerk"] });
+  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ola", "Norway"), as("Kurt"), as("Karl"), as("Kim")];
+  const grp = game({ court: 1 }), grp2 = game({ court: 2, teamA: { name: "Italy" }, teamB: { name: "Chile" } });
+  const semi = game({ round: "Semifinal 1", time: "12:00" });
+  const res = autoAssign([grp, grp2, semi], offs, [], { rules: { r2: "finals", clerk2Courts: ["1"] } });
+  assert.ok(at(res, grp).r1 && !at(res, grp).r2);
+  assert.ok(at(res, semi).r1 && at(res, semi).r2);
+  assert.ok(at(res, grp).clerk && at(res, grp).clerk2);
+  assert.ok(at(res, grp2).clerk && !at(res, grp2).clerk2);
+  assert.equal(res.after.counts.hard, 0);
+});
+
+test("clerks may work in a row and keep their court", () => {
+  const as = (first) => ({ first, name: "Clerk", roles: ["clerk"] });
+  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ola", "Norway"), ref("Ida", "Italy"), as("Kurt"), as("Karl")];
+  const gs = [];
+  for (const time of ["09:00", "10:00", "11:00"]) for (const court of [1, 2]) gs.push(game({ time, court, teamA: { name: `A${time}${court}` }, teamB: { name: `B${time}${court}` } }));
+  const res = autoAssign(gs, offs, []);
+  const byCourt = {};
+  for (const g of res.games) (byCourt[g.court] ||= new Set()).add(g.refs.clerk);
+  assert.equal(byCourt[1].size, 1); // the same clerk on court 1 all day
+  assert.equal(byCourt[2].size, 1);
+  assert.ok(!res.after.list.some((i) => i.slot === "clerk"));
+});
+
+test("final: the referees work the lines; club members never officiate their club", () => {
+  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ola", "Norway"), ref("Ida", "Italy"),
+    { first: "Lena", name: "Lr", roles: ["assistant"] }, { first: "Lars", name: "Lr", roles: ["assistant"] }];
+  const fin = game({ round: "Gold medal match" });
+  const r = at(autoAssign([fin], offs, []), fin);
+  assert.ok(![r.a1, r.a2].some((n) => /Lr$/.test(n)), JSON.stringify(r));
+  const off = at(autoAssign([fin], offs, [], { rules: { finalRefsOnLines: false } }), fin);
+  assert.deepEqual([off.a1, off.a2].sort(), ["Lars Lr", "Lena Lr"]);
+  // A clerk and an assistant from a playing club are never used for that game.
+  const entries = [{ name: "Ahlhorn", club: "Ahlhorner SV" }];
+  const clubOffs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"),
+    { first: "Kurt", name: "Ahl", roles: ["clerk"], club: "Ahlhorner SV" }, { first: "Lina", name: "Ahl", roles: ["assistant"], club: "Ahlhorner SV" }, { first: "Max", name: "Lr", roles: ["assistant"] }];
+  const cg = game({ category: "Clubs Men", teamA: { name: "Ahlhorn" }, teamB: { name: "Elgg" } });
+  const cr = at(autoAssign([cg], clubOffs, entries), cg);
+  assert.ok(![cr.clerk, cr.a1, cr.a2].includes("Kurt Ahl") && ![cr.a1, cr.a2].includes("Lina Ahl"), JSON.stringify(cr));
+});
+
+test("club competitions: a referee from a club's nation is used only when needed; ranks count for assistants too", () => {
+  const entries = [{ name: "Linz", country: "Austria" }];
+  const aut = { first: "Anna", name: "Aut", country: "Austria", roles: ["referee"] };
+  const cg = game({ category: "Clubs Men", teamA: { name: "Linz" }, teamB: { name: "Elgg" } });
+  const only = at(autoAssign([cg], [aut, ref("Dan", "Denmark")], entries), cg);
+  assert.ok([only.r1, only.r2].includes("Anna Aut")); // allowed (warning), not blocked
+  const neutral = at(autoAssign([cg], [aut, ref("Dan", "Denmark"), ref("Ola", "Norway")], entries), cg);
+  assert.ok(![neutral.r1, neutral.r2].includes("Anna Aut"));
+  // Assistants: the top game gets the top-ranked assistants.
+  const lr = (first, rank) => ({ first, name: "Lr", roles: ["assistant"], ...(rank ? { rank } : {}) });
+  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ola", "Norway"), ref("Ida", "Italy"), lr("Al"), lr("Bo"), lr("Tia", "top"), lr("Tom", "top")];
+  const normal = game({ teamA: { name: "Italy" }, teamB: { name: "Austria" } });
+  const semi = game({ round: "Semifinal 1", court: 2 });
+  const res = autoAssign([normal, semi], offs, []);
+  assert.deepEqual([at(res, semi).a1, at(res, semi).a2].sort(), ["Tia Lr", "Tom Lr"]);
+});

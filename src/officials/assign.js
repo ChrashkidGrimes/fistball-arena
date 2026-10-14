@@ -24,9 +24,9 @@
 
 import {
   canFill, parseRoles, availabilityOn, availableAt, parseSlots,
-  teamMeta, sameCountry, sameClub, isWomensGame, isWomenFinal, rankOf, rankLevel, gameRank,
+  teamMeta, sameCountry, sameClub, isWomensGame, isWomenFinal, rankOf, rankLevel, gameRank, isClubGame,
 } from "./model.js";
-import { checkAssignments, isKnockout, officialName, DEFAULT_RULES, SLOTS } from "./rules.js";
+import { checkAssignments, isKnockout, officialName, DEFAULT_RULES, SLOTS, isRequiredSlot, refsOnLines } from "./rules.js";
 import { isPlaceholder } from "../schedule/advance.js";
 
 // Penalty weights. Ordering per spec §3.5:
@@ -43,8 +43,10 @@ export const DEFAULT_WEIGHTS = {
   r2Nation: 1e5,    // knockout r2 from a playing nation
   reserve: 1e4,
   pairSplit: 2000,  // splitting an intact assistant pair
-  rankUnder: 1500,  // per rank level Referee 1 is below the game's rank
+  finalLines: 3000, // a non-referee on the lines of the final (when referees work the lines)
+  rankUnder: 1500,  // per rank level Referee 1 (or an assistant) is below the game's rank
   maxPerDay: 1000,
+  nationClub: 400,  // club competition: referee from the nation of a playing club (above breaks)
   break: 300,       // per extra game in a row (2 in a row)
   assistantClub: 150,
   refereeAsAssistantNation: 100,
@@ -52,9 +54,10 @@ export const DEFAULT_WEIGHTS = {
   genderUnknown: 50,
   rankOver: 40,     // per rank level a referee (1 or 2) is above the game's rank
   cmRound: 5000,    // a second court manager in the same round (one per round covers all courts)
+  clerkCourtSwitch: 15, // a clerk working on in the next round, but on another court
   load: 10,         // per game already worked (balances the load)
   gender: 8,        // bonus: female referee on a women's game
-  repeat: 3,        // per earlier game with one of these teams
+  repeat: 6,        // per earlier game a referee had with one of these teams
 };
 
 const norm = (s) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -71,7 +74,7 @@ export function gridScore(games, officials, entries, w = DEFAULT_WEIGHTS, rules 
   const res = checkAssignments(games, officials, entries, rules);
   return { res, score: scoreOf(res, games, officials, w) };
 }
-const SOFT_WEIGHT = { r2Nation: "r2Nation", reserve: "reserve", inRow: "break", assistantClub: "assistantClub", refereeAsAssistantNation: "refereeAsAssistantNation", maxPerDay: "maxPerDay", pairSplit: "pairSplit", gender: "genderUnknown" };
+const SOFT_WEIGHT = { r2Nation: "r2Nation", reserve: "reserve", inRow: "break", refereeAsAssistantNation: "refereeAsAssistantNation", maxPerDay: "maxPerDay", pairSplit: "pairSplit", gender: "genderUnknown", nationClub: "nationClub", finalLines: "finalLines" };
 function scoreOf(res, games, officials, w) {
   let s = 0;
   for (const i of res.list) {
@@ -81,11 +84,15 @@ function scoreOf(res, games, officials, w) {
   }
   const byName = new Map(officials.map((o) => [norm(officialName(o)), o]));
   const seen = new Map();
+  const clerkAt = new Map(); // clerk → date → [[time, court]]
   for (const g of games) {
     const fem = isWomensGame(g);
     for (const slot of SLOTS) {
       const k = norm(g.refs?.[slot]);
       if (!k) continue;
+      if (slot === "clerk" || slot === "clerk2") { const d = (clerkAt.get(k) || clerkAt.set(k, new Map()).get(k)); (d.get(g.date) || d.set(g.date, []).get(g.date)).push([timeKey(g.time), String(g.court)]); }
+      if ((slot === "a1" || slot === "a2") && byName.has(k)) s += w.rankUnder * Math.max(0, rankLevel(gameRank(g)) - rankLevel(rankOf(byName.get(k))));
+      if (slot !== "r1" && slot !== "r2") continue;
       for (const t of [teamKey(g.teamA), teamKey(g.teamB)]) {
         const key = k + "|" + t;
         const n = seen.get(key) || 0;
@@ -96,6 +103,14 @@ function scoreOf(res, games, officials, w) {
       if ((slot === "r1" || slot === "r2") && byName.has(k)) s += w.rankOver * Math.max(0, rankLevel(rankOf(byName.get(k))) - rankLevel(gameRank(g)));
     }
   }
+  // Clerks keep their court from one round to the next.
+  const times = new Map(); // date → sorted distinct start times
+  for (const g of games) (times.get(g.date) || times.set(g.date, new Set()).get(g.date)).add(timeKey(g.time));
+  for (const [, days] of clerkAt) for (const [date, list] of days) {
+    const order = [...times.get(date)].sort();
+    const at = new Map(list.map(([t, c]) => [order.indexOf(t), c]));
+    for (const [i, c] of at) if (at.has(i - 1) && at.get(i - 1) !== c) s += w.clerkCourtSwitch;
+  }
   return s;
 }
 
@@ -104,9 +119,10 @@ export function autoAssign(games, officials, entries, opts = {}) {
   const rules = { ...DEFAULT_RULES, ...opts.rules };
   const inScope = (g) => !opts.days?.length || opts.days.includes(g.date);
   const pool = (officials || []).filter((o) => officialName(o));
-  const assistantPool = pool.some((o) => hasRole(o, "assistant"));
-  const clerkPool = pool.some((o) => hasRole(o, "clerk"));
-  const courtManagerPool = pool.some((o) => hasRole(o, "courtManager"));
+  const pools = { assistant: pool.some((o) => hasRole(o, "assistant")), clerk: pool.some((o) => hasRole(o, "clerk")), courtManager: pool.some((o) => hasRole(o, "courtManager")) };
+  const required = (g, slot) => isRequiredSlot(g, slot, pools, rules);
+  // Who may take a slot: in the final (event setting) the referees work the lines.
+  const eligible = (o, g, slot) => ((slot === "a1" || slot === "a2") && refsOnLines(g, rules) ? hasRole(o, "referee") : canFill(o, slot));
   const keyOf = new Map(pool.map((o) => [o, norm(officialName(o))]));
   const byKey = new Map(pool.map((o) => [keyOf.get(o), o]));
 
@@ -134,9 +150,11 @@ export function autoAssign(games, officials, entries, opts = {}) {
   // Court manager duty is kept apart (cm: Set(date|time)): one court manager
   // looks after all courts of a round, and the duty doesn't count for load,
   // breaks or maxPerDay of the other roles.
-  const st = new Map(); // key → { total, day: {date: n}, rounds: {date: Set}, booked: Set(date|time), teams: Map, cm: Set(date|time) }
+  // Clerk duty counts for the load but not for games in a row (clerks may
+  // work on), and records the court per round (court loyalty).
+  const st = new Map(); // key → { total, day: {date: n}, rounds: {date: Set}, booked: Set(date|time), teams: Map, cm: Set(date|time), court: Map(date|round → court) }
   const S = (k) => {
-    if (!st.has(k)) st.set(k, { total: 0, day: {}, rounds: {}, booked: new Set(), teams: new Map(), cm: new Set() });
+    if (!st.has(k)) st.set(k, { total: 0, day: {}, rounds: {}, booked: new Set(), teams: new Map(), cm: new Set(), court: new Map() });
     return st.get(k);
   };
   const cmRounds = (k, date) => [...S(k).cm].filter((x) => x.startsWith(date + "|")).length;
@@ -145,9 +163,11 @@ export function autoAssign(games, officials, entries, opts = {}) {
     if (slot === "cm") { p.cm.add(g.date + "|" + timeKey(g.time)); return; }
     p.total++;
     p.day[g.date] = (p.day[g.date] || 0) + 1;
-    (p.rounds[g.date] ||= new Set()).add(roundOf(g));
     p.booked.add(g.date + "|" + timeKey(g.time));
-    for (const t of [teamKey(g.teamA), teamKey(g.teamB)]) p.teams.set(t, (p.teams.get(t) || 0) + 1);
+    p.court.set(g.date + "|" + roundOf(g), String(g.court));
+    if (slot === "clerk" || slot === "clerk2") return;
+    (p.rounds[g.date] ||= new Set()).add(roundOf(g));
+    if (slot === "r1" || slot === "r2") for (const t of [teamKey(g.teamA), teamKey(g.teamB)]) p.teams.set(t, (p.teams.get(t) || 0) + 1);
   };
   for (const g of work) for (const s of SLOTS) { const k = norm(g.refs[s]); if (k) book(k, g, s); }
 
@@ -173,8 +193,8 @@ export function autoAssign(games, officials, entries, opts = {}) {
   // Returns null when not allowed.
   const cost = (o, g, slot) => {
     const k = keyOf.get(o);
-    if (!canFill(o, slot)) return null;
-    if (!availableAt(o, g.date, g.time)) return null;
+    if (!eligible(o, g, slot)) return null;
+    if (!availableAt(o, g.date, g.time, rules.gameMinutes)) return null;
     if (SLOTS.some((s) => norm(g.refs[s]) === k)) return null;
     if (S(k).booked.has(g.date + "|" + timeKey(g.time))) return null;
     if (slot === "cm") {
@@ -187,16 +207,18 @@ export function autoAssign(games, officials, entries, opts = {}) {
       return c;
     }
     if (S(k).cm.has(g.date + "|" + timeKey(g.time))) return null;
-    const run = runWith(k, g.date, roundOf(g));
+    const isRef = slot === "r1" || slot === "r2", isAssistant = slot === "a1" || slot === "a2", isClerk = slot === "clerk" || slot === "clerk2";
+    // Clerks may work game after game; everyone else needs breaks.
+    const run = isClerk ? 1 : runWith(k, g.date, roundOf(g));
     if (run >= rules.hardInRow) return null;
     const A = teamMeta(entries, g.teamA), B = teamMeta(entries, g.teamB);
     const nation = o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country));
     const club = o.club && (sameClub(o.club, A.club) || sameClub(o.club, B.club));
-    const isRef = slot === "r1" || slot === "r2", isAssistant = slot === "a1" || slot === "a2";
+    if (club && (isRef || isAssistant || isClerk)) return null; // members of a playing club never officiate it
     let c = 0;
     if (isRef) {
-      if (club) return null;
-      if (nation) {
+      if (nation && isClubGame(g)) c += w.nationClub; // club competition: only a strong warning
+      else if (nation) {
         if (slot === "r1" || !isKnockout(g)) return null;
         c += w.r2Nation;
       }
@@ -206,15 +228,20 @@ export function autoAssign(games, officials, entries, opts = {}) {
       if (diff > 0) c += w.rankOver * diff;
     }
     if (isAssistant) {
-      if (club) c += w.assistantClub;
       if (nation && hasRole(o, "referee")) c += w.refereeAsAssistantNation;
+      const diff = rankLevel(rankOf(o)) - rankLevel(gameRank(g));
+      if (diff < 0) c += w.rankUnder * -diff;
+    }
+    if (isClerk) {
+      const prev = S(k).court.get(g.date + "|" + (roundOf(g) - 1));
+      if (prev && prev !== String(g.court)) c += w.clerkCourtSwitch;
     }
     if (availabilityOn(o, g.date).status === "reserve") c += w.reserve;
     if (run >= rules.softInRow) c += w.break * (run - rules.softInRow + 1);
     const p = S(k);
     if (o.maxPerDay && (p.day[g.date] || 0) >= o.maxPerDay) c += w.maxPerDay;
     c += w.load * ((p.day[g.date] || 0) + p.total / 2);
-    c += w.repeat * ((p.teams.get(teamKey(g.teamA)) || 0) + (p.teams.get(teamKey(g.teamB)) || 0));
+    if (isRef) c += w.repeat * ((p.teams.get(teamKey(g.teamA)) || 0) + (p.teams.get(teamKey(g.teamB)) || 0));
     return c;
   };
   // Tie-break: fewest games so far, then name.
@@ -227,8 +254,8 @@ export function autoAssign(games, officials, entries, opts = {}) {
     if (!g._target) continue;
     const empty = (s) => !String(g.refs[s] ?? "").trim();
 
-    // Referees: r1 + r2 together.
-    const r = ["r1", "r2"].filter(empty);
+    // Referees: r1 + r2 together (r2 only where required — elsewhere by hand).
+    const r = ["r1", "r2"].filter((s) => empty(s) && required(g, s));
     if (r.length) {
       const female = (x) => (typeof x === "string" ? byKey.get(norm(x))?.gender : x?.gender) === "f";
       const genderOk = (r1, r2) => !isWomenFinal(g) || female(r1) || female(r2);
@@ -253,9 +280,10 @@ export function autoAssign(games, officials, entries, opts = {}) {
       }
     }
 
-    // Assistants: a1 + a2, pairs together (only when an assistant pool exists).
+    // Assistants: a1 + a2, pairs together (when an assistant pool exists, or
+    // in the final when the referees work the lines).
     const l = ["a1", "a2"].filter(empty);
-    if (assistantPool && l.length) {
+    if ((pools.assistant || refsOnLines(g, rules)) && l.length) {
       // Penalty for one line judge given who works the other line.
       const pairCost = (o, mate) => {
         const p = partnerOf(o, g.date);
@@ -286,14 +314,15 @@ export function autoAssign(games, officials, entries, opts = {}) {
       }
     }
 
-    // Clerk (only when a clerk pool exists; nation / club don't matter).
-    if (clerkPool && empty("clerk")) {
-      const best = pick(pool.map((o) => ({ o: [o], c: cost(o, g, "clerk") })).filter((x) => x.c !== null));
-      if (best) set(g, "clerk", best.o[0]);
+    // Clerks (when a clerk pool exists; Clerk 2 on the courts set for it).
+    for (const slot of ["clerk", "clerk2"]) {
+      if (!empty(slot) || !required(g, slot)) continue;
+      const best = pick(pool.map((o) => ({ o: [o], c: cost(o, g, slot) })).filter((x) => x.c !== null));
+      if (best) set(g, slot, best.o[0]);
     }
 
     // Court manager (only when a court manager pool exists).
-    if (courtManagerPool && empty("cm")) {
+    if (pools.courtManager && empty("cm")) {
       const best = pick(pool.map((o) => ({ o: [o], c: cost(o, g, "cm") })).filter((x) => x.c !== null));
       if (best) set(g, "cm", best.o[0]);
     }
@@ -333,15 +362,15 @@ export function autoAssign(games, officials, entries, opts = {}) {
       for (const hole of holes) {
         const g = byId.get(hole.gameId), s = hole.slot;
         // Direct fill: someone free by now (or a court manager on a parallel court).
-        for (const o of pool) if (canFill(o, s) && availableAt(o, g.date, g.time)) consider([[g, s, officialName(o)]]);
+        for (const o of pool) if (eligible(o, g, s) && availableAt(o, g.date, g.time, rules.gameMinutes)) consider([[g, s, officialName(o)]]);
         for (const [g2, s2] of cells) {
           if (Date.now() >= deadline) break;
           const v = g2.refs[s2], X = byKey.get(norm(v));
-          if (!X || !canFill(X, s) || !availableAt(X, g.date, g.time)) continue;
+          if (!X || !eligible(X, g, s) || !availableAt(X, g.date, g.time, rules.gameMinutes)) continue;
           consider([[g2, s2, ""], [g, s, v]]);
           for (const Y of pool) {
             const vy = officialName(Y);
-            if (norm(vy) === norm(v) || !canFill(Y, s2) || !availableAt(Y, g2.date, g2.time)) continue;
+            if (norm(vy) === norm(v) || !eligible(Y, g2, s2) || !availableAt(Y, g2.date, g2.time, rules.gameMinutes)) continue;
             consider([[g2, s2, vy], [g, s, v]]);
             for (const [g3, s3] of cells) {
               if ((g3 === g2 && s3 === s2) || norm(g3.refs[s3]) !== norm(vy)) continue;
@@ -367,19 +396,47 @@ export function autoAssign(games, officials, entries, opts = {}) {
     let cur = gridScore(dayGames, pool, entries, w, rules);
     for (let step = 0; step < (opts.maxSwaps ?? 200) && Date.now() < deadline; step++) {
       const cells = [];
-      for (const g of dayGames) for (const s of ["r1", "r2", "clerk"]) if (fresh(g, s)) cells.push([g, s]);
+      for (const g of dayGames) for (const s of ["r1", "r2", "clerk", "clerk2"]) if (fresh(g, s)) cells.push([g, s]);
       const problems = cells.filter(([g, s]) => cur.res.cells[g.id]?.[s]?.length);
+      const isClerk = (s) => s === "clerk" || s === "clerk2";
       let done = false;
       for (const [g1, s1] of problems) {
         for (const [g2, s2] of cells) {
           if (Date.now() >= deadline) break;
-          if (g1 === g2 || (s1 === "clerk") !== (s2 === "clerk")) continue;
+          if (g1 === g2 || isClerk(s1) !== isClerk(s2)) continue;
           const v1 = g1.refs[s1], v2 = g2.refs[s2];
           if (norm(v1) === norm(v2)) continue;
           g1.refs[s1] = v2; g2.refs[s2] = v1;
           const next = gridScore(dayGames, pool, entries, w, rules);
           if (next.res.counts.hard <= cur.res.counts.hard && next.score < cur.score) { cur = next; done = true; break; }
           g1.refs[s1] = v1; g2.refs[s2] = v2;
+        }
+        if (done) break;
+      }
+      if (!done) break;
+    }
+  }
+
+  // Assistants: swap whole crews (a1 + a2, so pairs stay together) between
+  // two games of the same day when that removes a problem (e.g. a missing
+  // break). Only crews auto-assign placed in this run; set-by-hand ones stay.
+  for (const date of days) {
+    const dayGames = work.filter((g) => g.date === date);
+    let cur = gridScore(dayGames, pool, entries, w, rules);
+    const crew = (g) => fresh(g, "a1") && fresh(g, "a2");
+    for (let step = 0; step < (opts.maxSwaps ?? 200) && Date.now() < deadline; step++) {
+      const crews = dayGames.filter(crew);
+      const problems = crews.filter((g) => ["a1", "a2"].some((s) => cur.res.cells[g.id]?.[s]?.length));
+      let done = false;
+      for (const g1 of problems) {
+        for (const g2 of crews) {
+          if (Date.now() >= deadline) break;
+          if (g1 === g2) continue;
+          const c1 = [g1.refs.a1, g1.refs.a2], c2 = [g2.refs.a1, g2.refs.a2];
+          [g1.refs.a1, g1.refs.a2, g2.refs.a1, g2.refs.a2] = [...c2, ...c1];
+          const next = gridScore(dayGames, pool, entries, w, rules);
+          if (next.res.counts.hard <= cur.res.counts.hard && next.score < cur.score) { cur = next; done = true; break; }
+          [g1.refs.a1, g1.refs.a2, g2.refs.a1, g2.refs.a2] = [...c1, ...c2];
         }
         if (done) break;
       }
