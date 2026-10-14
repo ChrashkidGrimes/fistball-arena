@@ -88,12 +88,20 @@ export function hasFormat(teamCount) { return !!KO[teamCount]; }
 
 function labelOf(src) {
   if (!src) return "?";
-  if (src.type === "seed") return seed(src.rank);
+  if (src.type === "seed") return src.group ? `${seed(src.rank)} Group ${src.group}` : seed(src.rank);
+  if (src.type === "rankedLoser") return rankedLoserLabel(src.rank);
   return `${src.type === "winner" ? "Winner" : "Loser"} ${nameOf(src.dep)}`;
 }
 
 // Rounds offered when adding a custom match.
-export const ROUND_OPTIONS = ["Quarterfinal 1", "Quarterfinal 2", "Semifinal 1", "Semifinal 2", "Placement 5-6", "Placement 7-8", "Placement 3-5", "Bronze medal match", "Gold medal match"];
+export const ROUND_OPTIONS = ["Quarterfinal 1", "Quarterfinal 2", "Quarterfinal 3", "Quarterfinal 4", "Semifinal 1", "Semifinal 2", "Placement 5-6", "Placement 7-8", "Placement 9-10", "Placement 11-12", "Placement 13-14", "Placement 3-5", "Bronze medal match", "Gold medal match"];
+
+// Quarterfinal losers ranked by their group-stage record (points, set and
+// point difference) — e.g. Pan-American Games: the 2 best play for 5th, the 2
+// worst for 7th. src: { type:"rankedLoser", deps:["ko:qf1",…], rank }.
+const QF_IDS = ["ko:qf1", "ko:qf2", "ko:qf3", "ko:qf4"];
+export const rankedLoserLabel = (rank) => `QF loser ranked ${seed(rank)}`;
+const RL = (rank) => ({ label: rankedLoserLabel(rank), src: { type: "rankedLoser", deps: QF_IDS, rank } });
 const STAGE_OF = (round) => /gold/i.test(round) ? "final" : /semi/i.test(round) ? "sf" : /quarter|play-off/i.test(round) ? "qf" : "bronze";
 
 // Override may be a legacy flat map (matchId -> {a,b}) or the richer shape
@@ -103,15 +111,20 @@ export function normalizeOverride(ov) {
   if (ov.edits || ov.removed || ov.added) return { edits: ov.edits || {}, removed: ov.removed || [], added: ov.added || [] };
   return { edits: ov, removed: [], added: [] };
 }
+const srcDeps = (s) => (!s || s.type === "seed" ? [] : s.type === "rankedLoser" ? s.deps || [] : [s.dep]);
 function mk(id, stage, idx, round, a, b, added) {
-  const deps = [a.src, b.src].filter((s) => s && s.type !== "seed").map((s) => s.dep);
+  const deps = [...new Set([...srcDeps(a.src), ...srcDeps(b.src)])];
   return { id, stage, idx, round, a, b, deps, added: !!added };
 }
 
 // Merge preset knockout with a per-category override (edits + removed + added).
 export function koFor(teamCount, override) {
+  return applyOverride(KO[teamCount] ? KO[teamCount]() : [], override);
+}
+// Preset matches + a per-category override (edits / removed / added).
+function applyOverride(preset, override) {
   const ov = normalizeOverride(override);
-  const base = (KO[teamCount] ? KO[teamCount]() : [])
+  const base = preset
     .filter((m) => !ov.removed.includes(m.id))
     .map((m) => {
       const o = ov.edits[m.id] || {};
@@ -142,6 +155,8 @@ export function slotOptions(teamCount, matchId, override) {
   return opts;
 }
 export function parseSlot(value) {
+  if (value.startsWith("gseed:")) { const [, group, rank] = value.split(":"); return { type: "seed", group, rank: Number(rank) }; }
+  if (value.startsWith("rloser:")) return { type: "rankedLoser", deps: QF_IDS, rank: Number(value.slice(7)) };
   if (value.startsWith("seed:")) return { type: "seed", rank: Number(value.slice(5)) };
   if (value.startsWith("winner:")) return { type: "winner", dep: value.slice(7) };
   if (value.startsWith("loser:")) return { type: "loser", dep: value.slice(6) };
@@ -149,7 +164,8 @@ export function parseSlot(value) {
 }
 export function slotValue(src) {
   if (!src) return "";
-  if (src.type === "seed") return `seed:${src.rank}`;
+  if (src.type === "seed") return src.group ? `gseed:${src.group}:${src.rank}` : `seed:${src.rank}`;
+  if (src.type === "rankedLoser") return `rloser:${src.rank}`;
   return `${src.type}:${src.dep}`;
 }
 
@@ -175,12 +191,14 @@ export function formatMatches(teamCount, override) { return koFor(teamCount, ove
 // Warn when a slot references a match that no longer exists (removed), so its
 // placeholder would never resolve.
 export function formatWarnings(teamCount, override) {
-  const ko = koFor(teamCount, override);
+  return matchWarnings(koFor(teamCount, override));
+}
+export function matchWarnings(ko) {
   const ids = new Set(ko.map((m) => `ko:${m.id}`));
   const out = [];
   for (const m of ko) {
     for (const s of [m.a.src, m.b.src]) {
-      if (s && s.type !== "seed" && !ids.has(s.dep)) out.push(`${m.round}: “${labelOf(s)}” — that match was removed.`);
+      if (s && s.type !== "seed" && srcDeps(s).some((d) => !ids.has(d))) out.push(`${m.round}: “${labelOf(s)}” — that match was removed.`);
     }
   }
   return out;
@@ -270,7 +288,7 @@ const GS = (g, n) => ({ label: `${seed(n)} Group ${g}`, src: { type: "seed", gro
 
 // Cross-over knockout from the groups' qualifiers. Returns matches in the same
 // shape as koFor (id, stage, idx, round, a, b, deps), or null if unsupported.
-export function groupKO(labels, Q, { placements = true } = {}) {
+export function groupKO(labels, Q, { placements = true, sizes = [] } = {}) {
   const G = labels.length;
   if (!(QUALIFIER_OPTIONS[G] || []).includes(Q)) return null;
   const [A, B, C, D, E, F, Gg, H] = labels;
@@ -302,18 +320,60 @@ export function groupKO(labels, Q, { placements = true } = {}) {
     semisFinal(GS(A, 1), W("qf1"), GS(B, 1), W("qf2"));
     if (placements) add("p56", "bronze", 1, "Placement 5-6", L("qf1"), L("qf2"));
   }
-  if (G === 2 && Q === 4) quarters([[GS(A, 1), GS(B, 4)], [GS(B, 2), GS(A, 3)], [GS(B, 1), GS(A, 4)], [GS(A, 2), GS(B, 3)]]);
+  if (G === 2 && Q === 4) {
+    // Pan-American Games format: A1×B4, A2×B3, A3×B2, A4×B1; SF crosses
+    // QF1/QF3 and QF2/QF4; QF losers play for 5th (2 best) and 7th (2 worst),
+    // ranked by their group-stage record.
+    [[GS(A, 1), GS(B, 4)], [GS(A, 2), GS(B, 3)], [GS(A, 3), GS(B, 2)], [GS(A, 4), GS(B, 1)]]
+      .forEach(([a, b], i) => add(`qf${i + 1}`, "qf", i, `Quarterfinal ${i + 1}`, a, b));
+    semisFinal(W("qf1"), W("qf3"), W("qf2"), W("qf4"));
+    if (placements) {
+      add("p5", "bronze", 1, "Placement 5-6", RL(1), RL(2));
+      add("p7", "bronze", 2, "Placement 7-8", RL(3), RL(4));
+    }
+  }
+  // Two groups: teams that didn't qualify play their counterpart for the
+  // places below (5th A × 5th B → 9th, 6th A × 6th B → 11th…).
+  if (G === 2 && placements) {
+    const both = Math.min(sizes[0] || 0, sizes[1] || 0);
+    for (let r = Q + 1; r <= both; r++) {
+      const place = 2 * r - 1;
+      add(`p${place}`, "bronze", 10 + r, `Placement ${place}-${place + 1}`, GS(A, r), GS(B, r));
+    }
+  }
   if (G === 4 && Q === 1) semisFinal(GS(A, 1), GS(D, 1), GS(B, 1), GS(C, 1));
   if (G === 4 && Q === 2) quarters([[GS(A, 1), GS(B, 2)], [GS(C, 1), GS(D, 2)], [GS(B, 1), GS(A, 2)], [GS(D, 1), GS(C, 2)]]);
   if (G === 8 && Q === 1) quarters([[GS(A, 1), GS(H, 1)], [GS(D, 1), GS(E, 1)], [GS(B, 1), GS(Gg, 1)], [GS(C, 1), GS(F, 1)]]);
   return out;
 }
 
+// The grouped knockout with the category's override (edits / removed / added)
+// applied, or null when there's no automatic bracket for this many groups.
+export function groupKoFor(groups, { qualifiers, placements = true, override } = {}) {
+  const base = groupKO(groups.map((g) => g.label), pickQualifiers(groups, qualifiers), { placements, sizes: groups.map((g) => g.teams.length) });
+  return base ? applyOverride(base.map((m) => ({ ...m })), override) : null;
+}
+
+// Slot choices in a grouped bracket: every group's ranks, the QF losers by
+// group-stage record, and winner/loser of earlier matches.
+export function groupSlotOptions(groups, ko, matchId) {
+  const opts = [];
+  for (const g of groups) for (let r = 1; r <= g.teams.length; r++) opts.push({ value: `gseed:${g.label}:${r}`, label: `${seed(r)} Group ${g.label}` });
+  if (ko.some((m) => m.id === "qf1") && ko.some((m) => m.id === "qf4")) for (let r = 1; r <= 4; r++) opts.push({ value: `rloser:${r}`, label: rankedLoserLabel(r) });
+  const idx = ko.findIndex((m) => m.id === matchId);
+  ko.forEach((m, i) => {
+    if (m.added || (idx !== -1 && i >= idx && !ko[idx].added)) return;
+    opts.push({ value: `winner:ko:${m.id}`, label: `Winner · ${m.round}` });
+    opts.push({ value: `loser:ko:${m.id}`, label: `Loser · ${m.round}` });
+  });
+  return opts;
+}
+
 // Summary for the Format step: games per group, knockout rounds and total.
-export function describeGroupFormat(groups, { double = false, knockout = true, qualifiers, placements = true } = {}) {
+export function describeGroupFormat(groups, { double = false, knockout = true, qualifiers, placements = true, override } = {}) {
   const per = groups.map((g) => ({ label: g.label, teams: g.teams.length, games: ((g.teams.length * (g.teams.length - 1)) / 2) * (double ? 2 : 1) }));
   const Q = pickQualifiers(groups, qualifiers);
-  const ko = knockout ? groupKO(groups.map((g) => g.label), Q, { placements }) : [];
+  const ko = knockout ? groupKoFor(groups, { qualifiers, placements, override }) : [];
   const rounds = [];
   for (const m of ko || []) {
     let r = rounds.find((x) => x.round === m.round);
@@ -326,7 +386,7 @@ export function describeGroupFormat(groups, { double = false, knockout = true, q
 
 // Fixtures for a grouped category: a round-robin per group (labelled with the
 // group) + the cross-over knockout. Same fixture shape as buildFormat.
-export function buildGroupFormat(groups, { category, bestOf = 3, bestOfKo, double = false, knockout = true, qualifiers, placements = true } = {}) {
+export function buildGroupFormat(groups, { category, bestOf = 3, bestOfKo, double = false, knockout = true, qualifiers, placements = true, override } = {}) {
   const fixtures = [];
   const warnings = [];
   let seq = 0;
@@ -342,7 +402,7 @@ export function buildGroupFormat(groups, { category, bestOf = 3, bestOfKo, doubl
   }
   if (knockout) {
     const Q = pickQualifiers(groups, qualifiers);
-    const ko = groupKO(groups.map((g) => g.label), Q, { placements });
+    const ko = groupKoFor(groups, { qualifiers, placements, override });
     if (!ko) warnings.push(`${category}: no automatic knockout for ${groups.length} groups × ${Q} qualifiers — group stage only.`);
     for (const m of ko || []) {
       fixtures.push({

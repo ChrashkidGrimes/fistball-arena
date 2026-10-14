@@ -5,7 +5,7 @@ import {
   subscribeLogos, addLogo, deleteLogo, subscribeTeamLogos, setTeamLogo, saveBranding, updateEventDetails, updateEventFields, publishGames, resetScores, saveScoringRules, subscribeGames,
 } from "../cloud.js";
 import { TYPES, COMMON_AGES, expandBuilder, buildColumns, sexWord } from "../categories.js";
-import { assignGroups, describeGroupFormat, QUALIFIER_OPTIONS, describeFormat, formatMatches, formatWarnings, slotOptions, parseSlot, slotValue, normalizeOverride, ROUND_OPTIONS } from "../schedule/format.js";
+import { assignGroups, describeGroupFormat, groupKoFor, groupSlotOptions, matchWarnings, QUALIFIER_OPTIONS, describeFormat, formatMatches, formatWarnings, slotOptions, parseSlot, slotValue, normalizeOverride, ROUND_OPTIONS } from "../schedule/format.js";
 import SlotsEditor from "../schedule/SlotsEditor.jsx";
 import { generateSchedule } from "../schedule/generator.js";
 import { eventToConfig } from "../schedule/eventToConfig.js";
@@ -96,7 +96,11 @@ export default function Settings({ me }) {
     else ov.edits[matchId] = { ...(ov.edits[matchId] || {}), [slot]: src };
   });
   const setRound = (cat, matchId, round) => mutateOv(cat, (ov) => { const m = ov.added.find((x) => x.id === matchId); if (m) m.round = round; });
-  const addMatch = (cat) => mutateOv(cat, (ov) => ov.added.push({ id: `x${Date.now()}`, round: "Placement 5-6", a: { type: "seed", rank: 5 }, b: { type: "seed", rank: 6 } }));
+  const addMatch = (cat) => mutateOv(cat, (ov) => ov.added.push((Number(details.formatVariants?.[cat]?.groups) || 1) > 1
+    ? { id: `x${Date.now()}`, round: "Placement 9-10", a: { type: "seed", group: "A", rank: 5 }, b: { type: "seed", group: "B", rank: 5 } }
+    : { id: `x${Date.now()}`, round: "Placement 5-6", a: { type: "seed", rank: 5 }, b: { type: "seed", rank: 6 } }));
+  // Groups of a category as the generator will build them (for the bracket editor).
+  const groupsOf = (cat) => assignGroups(teamsInCat(cat), details.formatVariants?.[cat]?.groups, details.formatVariants?.[cat]?.groupOf || {});
   const removeMatch = (cat, matchId, isAdded) => mutateOv(cat, (ov) => {
     if (isAdded) ov.added = ov.added.filter((m) => m.id !== matchId);
     else if (!ov.removed.includes(matchId)) ov.removed.push(matchId);
@@ -516,14 +520,15 @@ export default function Settings({ me }) {
               const d = describeFormat(count, details.formatOverrides?.[cat], flags);
               const groups = assignGroups(teamsInCat(cat), v?.groups, v?.groupOf || {});
               const nGroups = groups.length;
-              const gd = nGroups > 1 ? describeGroupFormat(groups, { ...flags, qualifiers: v?.qualifiers, placements: v?.placements !== false }) : null;
+              const gd = nGroups > 1 ? describeGroupFormat(groups, { ...flags, qualifiers: v?.qualifiers, placements: v?.placements !== false, override: details.formatOverrides?.[cat] }) : null;
+              const gWarn = gd && flags.knockout ? matchWarnings(groupKoFor(groups, { qualifiers: v?.qualifiers, placements: v?.placements !== false, override: details.formatOverrides?.[cat] }) || []) : [];
               const minSize = Math.min(...groups.map((g) => g.teams.length));
               const hasQF = gd && gd.rounds.some((r) => /quarterfinal/i.test(r.round));
               return (
                 <div className="fmt-cat" key={cat}>
                   <div className="fmt-head"><b>{cat}</b><span className="tag">{count} team{count === 1 ? "" : "s"}</span>
-                    {nGroups === 1 && count > 0 && d && flags.knockout && formatWarnings(count, details.formatOverrides?.[cat]).length > 0 && <span className="tag" style={{ background: "#fff4e5", color: "#8a5a00" }}>⚠️ check</span>}
-                    {nGroups === 1 && count > 0 && d && flags.knockout && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setBracketIdx(ci)}>View bracket</button>}
+                    {((nGroups === 1 && count > 0 && d && flags.knockout && formatWarnings(count, details.formatOverrides?.[cat]).length > 0) || gWarn.length > 0) && <span className="tag" style={{ background: "#fff4e5", color: "#8a5a00" }}>⚠️ check</span>}
+                    {((nGroups === 1 && count > 0 && d) || (gd && gd.koSupported)) && flags.knockout && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setBracketIdx(ci)}>View bracket</button>}
                   </div>
                   {count > 0 && (
                     <>
@@ -557,8 +562,8 @@ export default function Settings({ me }) {
                             </select>
                           </label>
                         )}
-                        {gd && flags.knockout && hasQF && (
-                          <label><input type="checkbox" checked={v?.placements !== false} disabled={archived} onChange={(e) => setVariantField(cat, { placements: e.target.checked })} /> Placement games for quarterfinal losers</label>
+                        {gd && flags.knockout && (hasQF || nGroups === 2) && (
+                          <label><input type="checkbox" checked={v?.placements !== false} disabled={archived} onChange={(e) => setVariantField(cat, { placements: e.target.checked })} /> Placement games (5th place and below)</label>
                         )}
                       </div>
                       {gd && (
@@ -781,7 +786,8 @@ export default function Settings({ me }) {
         <BracketModal
           category={previewCats[bracketIdx]}
           teams={teamsInCat(previewCats[bracketIdx])}
-          grouped={(Number(details.formatVariants?.[previewCats[bracketIdx]]?.groups) || 1) > 1}
+          groups={(Number(details.formatVariants?.[previewCats[bracketIdx]]?.groups) || 1) > 1 ? groupsOf(previewCats[bracketIdx]) : null}
+          variant={details.formatVariants?.[previewCats[bracketIdx]] || {}}
           override={details.formatOverrides?.[previewCats[bracketIdx]]}
           onSlot={(matchId, slot, value, isAdded) => setSlot(previewCats[bracketIdx], matchId, slot, value, isAdded)}
           onRound={(matchId, round) => setRound(previewCats[bracketIdx], matchId, round)}
@@ -862,17 +868,21 @@ function BroadcastLinks({ eventId, games }) {
   );
 }
 
-function BracketModal({ category, teams, grouped, override, onSlot, onRound, onAdd, onRemove, onReset, onSave, archived, idx, total, onClose, onNext }) {
+function BracketModal({ category, teams, groups, variant, override, onSlot, onRound, onAdd, onRemove, onReset, archived, idx, total, onClose, onNext }) {
   const n = teams.length;
-  const matches = formatMatches(n, override);
-  const warnings = formatWarnings(n, override);
+  // Several groups: cross-over knockout from the groups; else the preset by team count.
+  const matches = groups
+    ? groupKoFor(groups, { qualifiers: variant?.qualifiers, placements: variant?.placements !== false, override }) || []
+    : formatMatches(n, override);
+  const warnings = groups ? matchWarnings(matches) : formatWarnings(n, override);
+  const optionsFor = (m) => (groups ? groupSlotOptions(groups, matches, m.id) : slotOptions(n, m.id, override));
   const last = idx + 1 >= total;
   const Slot = ({ m, side }) => {
     const slot = side === "a" ? m.a : m.b;
     if (archived) return <span className="brk-slot-ro">{slot.label}</span>;
     return (
       <select className="brk-slot" value={slotValue(slot.src)} onChange={(e) => onSlot(m.id, side, e.target.value, m.added)}>
-        {slotOptions(n, m.id, override).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {optionsFor(m).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     );
   };
@@ -882,16 +892,16 @@ function BracketModal({ category, teams, grouped, override, onSlot, onRound, onA
         <button className="modal-x" onClick={onClose} aria-label="Close">✕</button>
         <h3 className="modal-title" style={{ marginBottom: 2 }}>{category}</h3>
         <p className="muted-sm" style={{ marginTop: 0 }}>{n} teams · category {idx + 1} of {total}</p>
-        {grouped ? (
-          <p className="muted-sm">This category is split into groups — its group stage and cross-over knockout are shown in the Format step.</p>
-        ) : !matches.length ? (
-          <p className="muted-sm">No preset for {n} teams yet.</p>
+        {!matches.length ? (
+          <p className="muted-sm">{groups ? `No automatic knockout for ${groups.length} groups.` : `No preset for ${n} teams yet.`}</p>
         ) : (
           <>
-            <div className="brk-group">
-              <div className="brk-col-title">Qualification Round · one group</div>
-              <div className="chips">{teams.map((t) => <span className="team-chip" key={t}>{t}</span>)}</div>
-            </div>
+            {(groups || [{ label: "", teams }]).map((g) => (
+              <div className="brk-group" key={g.label}>
+                <div className="brk-col-title">Qualification Round · {g.label ? `Group ${g.label}` : "one group"}</div>
+                <div className="chips">{g.teams.map((t) => <span className="team-chip" key={t}>{t}</span>)}</div>
+              </div>
+            ))}
             <div className="brk-edit-list">
               {matches.map((m) => (
                 <div className="brk-edit-row" key={m.id}>

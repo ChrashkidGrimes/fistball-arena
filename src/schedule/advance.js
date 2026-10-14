@@ -6,7 +6,7 @@
 //   - loser  → the loser of a finished source game
 // Returns { [gameId]: { teamA?, teamB? } } with only the newly-resolvable slots.
 
-import { rankGroup, groupComplete } from "./standings.js";
+import { rankGroup, groupComplete, compareRecords } from "./standings.js";
 
 const num = (x) => (Number.isFinite(+x) ? +x : 0);
 const finished = (r) => r && r.status === "Finished";
@@ -40,6 +40,12 @@ export function resolveAdvancement(games, resultsById, teamCount) {
     if (!src) return null;
     if (src.type === "seed" && src.group) { const r = rankingOf(src.group); return r ? r[src.rank - 1] || null : null; }
     if (src.type === "seed") return ranking ? ranking[src.rank - 1] || null : null;
+    if (src.type === "rankedLoser") {
+      // Once every source game is finished, rank their losers by group stage.
+      const losers = (src.games || src.deps || []).map((id) => loserOf(resultsById[id]));
+      if (!losers.length || losers.some((l) => !l)) return null;
+      return losers.sort(compareRecords(qrResults))[src.rank - 1] || null;
+    }
     if (src.type === "winner") return winnerOf(resultsById[src.game || src.dep]);
     if (src.type === "loser") return loserOf(resultsById[src.game || src.dep]);
     return null;

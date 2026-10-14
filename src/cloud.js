@@ -6,6 +6,7 @@ import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { db, auth, googleProvider } from "./firebase.js";
 import { team } from "./seed.js";
 import { resolveAdvancement } from "./schedule/advance.js";
+import { rankedLoserLabel } from "./schedule/format.js";
 
 /* ----------------- identity (Google login) ----------------- */
 // Bootstrap org-admins — can create events and manage members of any event.
@@ -388,6 +389,7 @@ function slotPlaceholder(src, gamesById) {
     const suf = n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th";
     return src.group ? `${n}${suf} Group ${src.group}` : `${n}${suf}`;
   }
+  if (src.type === "rankedLoser") return rankedLoserLabel(src.rank);
   const round = gamesById[src.game || src.dep]?.round;
   if (!round) return null;
   if (src.type === "winner") return `Winner ${round}`;
@@ -457,6 +459,7 @@ export async function resetReport(gameId) {
   const isQR = game.round === "Qualification round";
   const dependsOnThis = (src) => !!src && (
     ((src.type === "winner" || src.type === "loser") && (src.game || src.dep) === gameId)
+    || (src.type === "rankedLoser" && (src.games || []).includes(gameId))
     || (src.type === "seed" && isQR));
   const rsnap = await getDocs(ecol("results"));
   const resById = {};
