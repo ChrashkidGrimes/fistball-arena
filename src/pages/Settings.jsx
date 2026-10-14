@@ -228,11 +228,12 @@ export default function Settings({ me }) {
 
   if (!isAdmin) return <div className="empty">Admins only.</div>;
 
-  const thisIsLive = live?.eventId === eventId;
+  const thisIsLive = !!live?.ids?.has(eventId);
+  const otherLive = (live?.events || []).filter((e) => e.eventId !== eventId);
   const publishLive = async () => { try { await setLiveEvent(event); } catch (e) { setStatus("Failed: " + (e?.message || e)); } };
   const stopLive = async () => {
     if (!window.confirm("Stop showing this event on Fistball Live?")) return;
-    try { await clearLiveEvent(); } catch (e) { setStatus("Failed: " + (e?.message || e)); }
+    try { await clearLiveEvent(eventId); } catch (e) { setStatus("Failed: " + (e?.message || e)); }
   };
   const toggleArchive = async () => {
     const next = archived ? "active" : "archived";
@@ -698,12 +699,12 @@ export default function Settings({ me }) {
           <p className="muted-sm">
             {live === undefined ? "Checking…"
               : thisIsLive ? "✅ This event is showing on the public scoreboard."
-              : live?.eventId ? `Another event is live: “${live.name || live.eventId}”.`
-              : "No event is on the public scoreboard yet."}
+              : "This event isn't on the public scoreboard yet."}
+            {otherLive.length > 0 && ` Also on Live: ${otherLive.map((e) => `“${e.name || e.eventId}”`).join(", ")} — spectators pick the event in Fistball Live.`}
           </p>
           {thisIsLive
             ? <button className="btn danger" onClick={stopLive}>Stop showing</button>
-            : <button className="btn primary" onClick={publishLive}>{live?.eventId ? "Show this instead" : "Publish to Live"}</button>}
+            : <button className="btn primary" onClick={publishLive}>Publish to Live</button>}
           <BroadcastLinks eventId={eventId} games={existingGames} />
         </Step>
 

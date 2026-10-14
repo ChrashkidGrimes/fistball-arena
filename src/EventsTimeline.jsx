@@ -102,7 +102,7 @@ export default function EventsTimeline({ events, brandings, live, roleOf, onOpen
             {placed.map(({ ev, left, lane, spanW, s, e2 }) => {
               const role = roleOf(ev);
               const RoleIcon = roleIcon(role);
-              const isLive = live?.eventId === ev.id;
+              const isLive = !!live?.ids?.has(ev.id);
               const logo = brandings?.[ev.id]?.eventLogo?.dataUrl;
               const dateLabel = fmtRange(s, e2);
               return (

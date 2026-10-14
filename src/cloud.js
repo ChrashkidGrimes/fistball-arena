@@ -352,29 +352,55 @@ export function subscribeAllBranding(cb) {
   }, (err) => { console.warn("branding list unavailable:", err?.code || err); cb({}); });
 }
 
-/* ----------------- Fistball Live pointer -----------------
- * A single PUBLIC doc telling the spectator app which event to show. Read
- * anonymously by Fistball Live; written by an admin of that event (or org-admin). */
+/* ----------------- Fistball Live: events on air -----------------
+ * Several events can be on Fistball Live at once (e.g. Clubs WC and the
+ * Pan-American Games a few days apart): each one's PUBLIC info doc
+ * (public/event_{id}) carries onLive:true and spectators pick an event.
+ * public/live still points at the latest one published, for Live versions
+ * that only knew a single event (and older events published that way).
+ * cb gets { eventId (latest), ids: Set, events: [{eventId, name, …}] }. */
 export function subscribeLivePointer(cb) {
-  return onSnapshot(doc(db, "public", "live"),
-    (d) => cb(d.exists() ? d.data() : null),
-    (err) => { console.warn("live pointer unavailable:", err?.code || err); cb(null); });
+  let pointer = null, onLive = [], firstPointer = false, firstList = false;
+  const emit = () => {
+    if (!firstPointer || !firstList) return;
+    const events = [...onLive];
+    if (pointer?.eventId && !events.some((e) => e.eventId === pointer.eventId)) events.push(pointer);
+    cb({ eventId: pointer?.eventId || events[0]?.eventId || null, name: pointer?.name || events[0]?.name || "", ids: new Set(events.map((e) => e.eventId)), events });
+  };
+  const u1 = onSnapshot(doc(db, "public", "live"),
+    (d) => { pointer = d.exists() ? d.data() : null; firstPointer = true; emit(); },
+    (err) => { console.warn("live pointer unavailable:", err?.code || err); pointer = null; firstPointer = true; emit(); });
+  const u2 = onSnapshot(query(collection(db, "public"), where("onLive", "==", true)),
+    (snap) => { onLive = snap.docs.map((d) => d.data()).filter((v) => v.eventId); firstList = true; emit(); },
+    (err) => { console.warn("live events unavailable:", err?.code || err); onLive = []; firstList = true; emit(); });
+  return () => { u1(); u2(); };
 }
 export async function setLiveEvent(event) {
   const eid = event?.id || reqEid();
+  // An event published before multi-event Live is only on the old pointer:
+  // flag it on air too, so moving the pointer doesn't take it off Live.
+  try {
+    const p = await getDoc(doc(db, "public", "live"));
+    const prev = p.exists() ? p.data().eventId : null;
+    if (prev && prev !== eid) await writeEventPublic(prev, { onLive: true });
+  } catch (e) { console.warn("couldn't keep the previous live event on air:", e?.code || e); }
   await setDoc(doc(db, "public", "live"), {
     eventId: eid, name: event?.name || "",
     startsAt: event?.startDate || "", endsAt: event?.endDate || "",
     updatedAt: serverTimestamp(),
   });
-  // Ensure the public info doc exists so the Live has place/dates/countdown.
+  // The public info doc (place/dates/countdown) also flags the event as on air.
   await writeEventPublic(eid, {
     name: event?.name || "", place: event?.place || "", address: event?.address || "", dates: event?.dates || "",
-    startsAt: event?.startDate || "", endsAt: event?.endDate || "",
+    startsAt: event?.startDate || "", endsAt: event?.endDate || "", onLive: true,
   });
 }
-export async function clearLiveEvent() {
-  await deleteDoc(doc(db, "public", "live"));
+// Take one event off Fistball Live (others stay on).
+export async function clearLiveEvent(eventId) {
+  const eid = eventId || reqEid();
+  await writeEventPublic(eid, { onLive: false });
+  const p = await getDoc(doc(db, "public", "live"));
+  if (p.exists() && p.data().eventId === eid) await deleteDoc(doc(db, "public", "live"));
 }
 
 // Reset all match reports (súmulas) — deletes every report and sets each public
