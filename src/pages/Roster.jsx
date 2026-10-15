@@ -73,6 +73,13 @@ export default function Roster({ me }) {
     }
     return [...m.values()].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
   }, [games, rosters]);
+  // Team names per category as the games spell them (for the Excel import check).
+  const scheduleTeams = useMemo(() => {
+    const isPlaceholder = (n) => /(winner|loser)/i.test(n) || /\b\d+(st|nd|rd|th)\b/i.test(n);
+    const m = {};
+    for (const g of games) for (const t of [g.teamA?.name, g.teamB?.name]) if (t && !isPlaceholder(t)) (m[g.category || ""] ||= new Set()).add(t);
+    return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, [...v].sort()]));
+  }, [games]);
   const registeredIn = (cat) => [...new Set(Object.values(rosters || {}).filter((t) => !cat || !t.category || t.category === cat).map((t) => t.name).filter(Boolean))].sort();
   const doRename = async (u) => {
     const to = fixTo[`${u.name}|${u.category}`];
@@ -152,7 +159,7 @@ export default function Roster({ me }) {
           </div>
         )}
         {/* ---- Excel upload ---- */}
-        <ExcelImport me={me} teamNames={(event?.entries || []).map((e) => e.name)} categories={eventCategoryNames(event)} />
+        <ExcelImport me={me} teamNames={(event?.entries || []).map((e) => e.name)} categories={eventCategoryNames(event)} scheduleTeams={scheduleTeams} />
 
         {/* ---- Google Sheet import (alternative) ---- */}
         <div className="card">

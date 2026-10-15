@@ -724,7 +724,8 @@ export default function Settings({ me }) {
         <div className="tools-divider">Tools (optional)</div>
 
         {/* ---- Import players & staff from Excel ---- */}
-        {!archived && <ExcelImport me={me} teamNames={(details.entries || []).map((e) => e.name)} categories={previewCats} />}
+        {!archived && <ExcelImport me={me} teamNames={(details.entries || []).map((e) => e.name)} categories={previewCats}
+          scheduleTeams={existingGames.reduce((m, g) => { for (const t of [g.teamA?.name, g.teamB?.name]) if (t && !/(winner|loser)|\b\d+(st|nd|rd|th)\b/i.test(t)) m[g.category || ""] = [...new Set([...(m[g.category || ""] || []), t])]; return m; }, {})} />}
 
         {/* ---- Classification points (point table) ---- */}
         <div className="card">

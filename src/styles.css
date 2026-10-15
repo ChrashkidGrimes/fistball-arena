@@ -959,3 +959,4 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .slot-min { width: 72px; }
 .slot-phases { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .slot-phases .filter-pill { padding: 4px 10px; font-size: 12px; }
+.sched-miss { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
