@@ -9,6 +9,7 @@ import Users from "./pages/Users.jsx";
 import Identity from "./pages/Identity.jsx";
 import InstallPrompt from "./InstallPrompt.jsx";
 import UpdatePrompt from "./UpdatePrompt.jsx";
+import StageBanner from "./StageBanner.jsx";
 import { onMe, signOutMe } from "./cloud.js";
 import "./styles.css";
 
@@ -47,5 +48,6 @@ function Root() {
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <Root />
+    <StageBanner />
   </StrictMode>
 );

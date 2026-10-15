@@ -40,6 +40,9 @@ data lives in Firestore, secured by rules.
 5. **Deploy** the `dist/` folder to any static host (GitHub Pages, Netlify,
    Firebase Hosting, …).
 
+   The reference deployment goes to a staging project first and is promoted
+   to production on approval — see [docs/staging.md](docs/staging.md).
+
 ## How it works
 
 - The Arena app **writes** everything under `events/{eventId}/…`

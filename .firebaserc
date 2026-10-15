@@ -1,6 +1,7 @@
 {
   "projects": {
     "default": "fistball-arena",
+    "staging": "fistball-arena-staging",
     "emulator": "demo-fistball"
   }
 }

@@ -960,3 +960,11 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .slot-phases { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .slot-phases .filter-pill { padding: 4px 10px; font-size: 12px; }
 .sched-miss { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Staging / test builds (src/StageBanner.jsx) */
+.stage-banner {
+  position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 10000;
+  background: #e8590c; color: #fff; font-weight: 700; font-size: 13px; letter-spacing: .04em;
+  padding: 5px 14px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+  pointer-events: none; white-space: nowrap;
+}

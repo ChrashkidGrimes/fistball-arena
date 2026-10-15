@@ -1,9 +1,21 @@
-name: Build & deploy (GitHub Pages)
+name: Deploy production (GitHub Pages)
 
+# Production is no longer deployed on every merge (main → staging first, see
+# deploy-staging.yml and docs/staging.md). Two ways to promote — keep the one
+# we agree on and delete the other trigger:
+#   A) "Run workflow" in the Actions tab (optionally with a commit / tag);
+#   B) pushing a release tag, e.g. `git tag v1.4.0 && git push origin v1.4.0`.
+# Either way the job runs in the "production" environment, so a required
+# reviewer (repo settings → Environments) has to approve it first.
 on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit, tag or branch to deploy (default: what staging runs = main)"
+        required: false
+        default: main
   push:
-    branches: [main]
-  workflow_dispatch: {}   # allow manual runs from the Actions tab
+    tags: ["v*"]
 
 # Least-privilege token: only what actions-gh-pages needs to push gh-pages.
 permissions:
@@ -11,13 +23,29 @@ permissions:
 
 concurrency:            # never let two deploys race
   group: pages-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://c-englert.github.io/fistball-arena/
+    env:
+      FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Same commit as staging?
+        run: |
+          staging=$(curl -fsS "${{ vars.STAGING_URL }}/version.json" 2>/dev/null | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p' || true)
+          here=$(git rev-parse HEAD)
+          echo "Deploying $here (staging runs: ${staging:-unknown})"
+          if [ -n "$staging" ] && [ "$staging" != "$here" ]; then
+            echo "::warning::This commit ($here) is not the one running on staging ($staging)."
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -27,7 +55,9 @@ jobs:
       - run: npm ci
 
       - name: Build
-        run: npm run build
+        run: |
+          npm run build
+          echo "{\"stage\":\"production\",\"commit\":\"$(git rev-parse HEAD)\",\"builtAt\":\"$(date -u +%FT%TZ)\"}" > dist/version.json
         # Optional overrides for forks: set these as repository secrets to point
         # at your own Firebase project. If unset, the reference config in
         # src/firebase.js is used (client-side, not secret).
@@ -46,3 +76,14 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           # peaceiris adds .nojekyll automatically so /assets isn't stripped.
+
+      # Optional: deploy the Firestore rules with the same commit (today they
+      # are deployed by hand). Only runs when the secret is set.
+      - name: Deploy Firestore rules and indexes to production
+        if: env.FIREBASE_SA != ''
+        run: |
+          printf '%s' "$FIREBASE_SA" > "$RUNNER_TEMP/sa.json"
+          npx --yes firebase-tools@15.32.1 deploy --only firestore:rules,firestore:indexes \
+            --project fistball-arena --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
