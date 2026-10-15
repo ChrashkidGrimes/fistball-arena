@@ -18,7 +18,7 @@ const s = StyleSheet.create({
   td: { padding: 4 },
   bold: { fontFamily: "Helvetica-Bold" },
   swatchRow: { flexDirection: "row", alignItems: "center", padding: 4 },
-  swatch: { width: 10, height: 10, borderWidth: 0.5, borderColor: "#555", marginRight: 4 },
+  swatch: { width: 10, height: 10, borderWidth: 0.5, borderColor: "#555", marginRight: 4, flexDirection: "row" },
   foot: { position: "absolute", bottom: 16, left: 28, right: 28, fontSize: 7, color: "#888", textAlign: "center" },
 });
 // Team columns / official columns.
@@ -31,8 +31,12 @@ const dayLong = (v) => {
   return new Date(2000 + (yy || 0), (mm || 1) - 1, dd).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 };
 const short = (t) => String(t?.name || t || "").split(" - ")[0];
-const Swatch = ({ color, label }) => (
-  <View style={s.swatchRow}><View style={[s.swatch, { backgroundColor: color }]} /><Text>{label}</Text></View>
+// A jersey (1–3 colours, one stripe each) or a referee shirt colour.
+const Swatch = ({ colors, label }) => (
+  <View style={s.swatchRow}>
+    <View style={s.swatch}>{colors.map((c, i) => <View key={i} style={{ flex: 1, backgroundColor: c }} />)}</View>
+    <Text>{label}</Text>
+  </View>
 );
 const Head = ({ event, title, sub }) => (
   <>
@@ -60,7 +64,7 @@ export default function PlansPDF({ event, teams, officials, rounds = 0, day }) {
               <Text style={[s.td, T.court]}>{g.court}</Text>
               <Text style={[s.td, T.game]}>#{g.nr}  {g.round}</Text>
               <Text style={[s.td, T.opp]}>{short(opponent)}</Text>
-              <View style={T.kit}>{kit ? <Swatch color={kit.shirt} label={`Uniform ${kit.n || ""}`} /> : <Text style={s.td}>not set</Text>}</View>
+              <View style={T.kit}>{kit ? <Swatch colors={kit.colors} label={`Uniform ${kit.n || ""}`} /> : <Text style={s.td}>not set</Text>}</View>
             </View>
           ))}
           <Foot />
@@ -81,7 +85,7 @@ export default function PlansPDF({ event, teams, officials, rounds = 0, day }) {
                 <Text style={[s.td, s.bold, O.role]}>{SLOT_LABEL[d.slot]}</Text>
                 <Text style={[s.td, O.court]}>{d.courts.join(", ")}</Text>
                 <Text style={[s.td, O.game]}>{d.games.map((g) => `#${g.nr}  ${short(g.teamA)} v ${short(g.teamB)}`).join("\n")}</Text>
-                <View style={O.shirt}>{d.shirts.length ? d.shirts.map((r) => <Swatch key={r.id} color={r.shirt} label={r.name} />) : <Text style={s.td}>—</Text>}</View>
+                <View style={O.shirt}>{d.shirts.length ? d.shirts.map((r) => <Swatch key={r.id} colors={[r.shirt]} label={r.name} />) : <Text style={s.td}>—</Text>}</View>
               </View>
             ))))}
           <Foot />

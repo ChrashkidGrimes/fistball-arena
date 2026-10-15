@@ -29,7 +29,7 @@ export default function EventPicker({ me, onSignOut }) {
   const shown = (events || []).filter((e) => (tab === "archived" ? e.status === "archived" : e.status !== "archived"));
   const canManageLive = (ev) => me.admin || ev.myRole === "admin";
   const toggleLive = async (ev, isLive) => {
-    try { if (isLive) { if (window.confirm("Remove this event from Fistball Live?")) await clearLiveEvent(); } else await setLiveEvent(ev); }
+    try { if (isLive) { if (window.confirm("Remove this event from Fistball Live?")) await clearLiveEvent(ev.id); } else await setLiveEvent(ev); }
     catch (e) { alert("Failed: " + (e?.message || e)); }
   };
 
@@ -133,7 +133,7 @@ export default function EventPicker({ me, onSignOut }) {
               </thead>
               <tbody>
                 {shown.map((ev) => {
-                  const isLive = live?.eventId === ev.id;
+                  const isLive = !!live?.ids?.has(ev.id);
                   const role = me.admin ? "org-admin" : ev.myRole;
                   const RoleIcon = role === "org-admin" ? IconStar : role === "admin" ? IconShield : role === "official" ? IconWhistle : IconEye;
                   const logo = brandings[ev.id]?.eventLogo?.dataUrl;
@@ -159,7 +159,7 @@ export default function EventPicker({ me, onSignOut }) {
         {view === "cards" && (
         <div className="card-grid">
         {shown.map((ev) => {
-          const isLive = live?.eventId === ev.id;
+          const isLive = !!live?.ids?.has(ev.id);
           const canEdit = me.admin || ev.myRole === "admin";
           const role = me.admin ? "org-admin" : ev.myRole;
           const RoleIcon = role === "org-admin" ? IconStar : role === "admin" ? IconShield : role === "official" ? IconWhistle : IconEye;
