@@ -1,8 +1,5 @@
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 
-const EVENT = "2026 U18 World Championship & Women's EFA Championship";
-const EVENT_DATE = "23rd – 26th July 2026";
-const EVENT_PLACE = "Reiden – Switzerland";
 
 const PURPLE = "#3a2d6b";
 const LINE = "#8a90a2";
@@ -120,7 +117,11 @@ function TeamColumn({ team, side }) {
   );
 }
 
-export default function SumulaPDF({ draft, branding }) {
+// Header text comes from this event: the public branding doc (name, dates,
+// place) with the event doc as fallback.
+export default function SumulaPDF({ draft, branding, event }) {
+  const evName = branding?.name || event?.name || "";
+  const evMeta = [branding?.dates || event?.dates, branding?.place || event?.place].filter(Boolean).join("  ·  ");
   const d = draft;
   const promos = (branding?.promoters || []).filter((p) => p?.dataUrl);
   const hasLogos = !!(branding?.eventLogo?.dataUrl || promos.length);
@@ -149,8 +150,8 @@ export default function SumulaPDF({ draft, branding }) {
             </View>
           )}
           <View style={s.hTop}>
-            <Text style={s.hEvent}>{branding?.name || EVENT}</Text>
-            <Text style={s.hMeta}>{EVENT_DATE}  ·  {EVENT_PLACE}</Text>
+            <Text style={s.hEvent}>{evName}</Text>
+            {evMeta ? <Text style={s.hMeta}>{evMeta}</Text> : null}
           </View>
           <Text style={s.hTitle}>Fistball Game Report</Text>
           <View style={s.row}>

@@ -123,7 +123,7 @@ export default function Plans() {
                     <td>{d.games.map((g) => (
                       <div key={g.id}>#{g.nr} <span className="flag">{flagFor(g.teamA?.name)}</span>{shortTeam(g.teamA)} <span className="muted-sm">v</span> <span className="flag">{flagFor(g.teamB?.name)}</span>{shortTeam(g.teamB)}</div>
                     ))}</td>
-                    <td>{d.shirts.length ? d.shirts.map((r) => <span key={r.id} className="plan-shirt"><KitSwatch kit={{ shirt: r.shirt }} size={14} /> {r.name}</span>) : <span className="muted-sm">—</span>}</td>
+                    <td>{d.shirts.length ? d.shirts.map((r) => <span key={r.id} className="plan-shirt"><KitSwatch kit={{ colors: [r.shirt] }} size={14} /> {r.name}</span>) : <span className="muted-sm">—</span>}</td>
                   </tr>
                 ))))}
             </tbody>

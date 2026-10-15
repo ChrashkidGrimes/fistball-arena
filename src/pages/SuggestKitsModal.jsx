@@ -69,7 +69,7 @@ export default function SuggestKitsModal({ games, teamKits, refKits = [], thresh
   })();
 
   const nChanges = res ? sum(res.changes) : 0;
-  const refLabel = (id) => { const r = refKits.find((x) => x.id === id); return r ? <><KitSwatch kit={{ shirt: r.shirt }} size={14} /> {r.name}</> : "—"; };
+  const refLabel = (id) => { const r = refKits.find((x) => x.id === id); return r ? <><KitSwatch kit={{ colors: [r.shirt] }} size={14} /> {r.name}</> : "—"; };
   const delta = (a, b) => (a === b ? <b>{b}</b> : <><s className="muted-sm">{a}</s> → <b>{b}</b></>);
 
   return (
@@ -77,7 +77,7 @@ export default function SuggestKitsModal({ games, teamKits, refKits = [], thresh
       <div className="modal aa-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <button className="modal-x" onClick={onClose} aria-label="Close" disabled={busy}>✕</button>
         <h3 className="modal-title">Suggest uniforms</h3>
-        <p className="muted-sm">Picks each team's uniform so no game has similar shirts: one uniform per team and day where possible (otherwise as few changes as possible), alternating between days. Then the officials' shirt per game, contrasting with both teams. Nothing is saved until you click Apply.</p>
+        <p className="muted-sm">Picks each team's uniform so no game has similar jerseys: one uniform per team and day where possible (otherwise as few changes as possible), alternating between days. Then the officials' shirt per game, contrasting with both teams. Nothing is saved until you click Apply.</p>
 
         <div className="aa-opts">
           <label>Days{" "}

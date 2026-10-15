@@ -243,7 +243,7 @@ export default function Referees() {
                     </label>
                     {(() => {
                       const rk = refKits.find((r) => r.id === g.kit?.R);
-                      return rk ? <span className="muted-sm rg-refshirt" title="Referee shirt">Referee <KitSwatch kit={{ shirt: rk.shirt }} size={12} /> {rk.name}</span> : null;
+                      return rk ? <span className="muted-sm rg-refshirt" title="Referee shirt">Referee <KitSwatch kit={{ colors: [rk.shirt] }} size={12} /> {rk.name}</span> : null;
                     })()}
                   </div>
                 </td>

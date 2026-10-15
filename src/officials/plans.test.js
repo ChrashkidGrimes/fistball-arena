@@ -7,7 +7,7 @@ let nr = 0;
 const game = (a, b, date, time, court, over = {}) => ({ id: `g${++nr}`, nr, date, time, court, category: "Men", round: "Qualification round", teamA: { name: a }, teamB: { name: b }, refs: {}, kit: {}, ...over });
 
 test("teamPlans: per team and category, in time order, with the uniform worn; placeholders skipped", () => {
-  const tk = { "X · Men": [{ shirt: "#e23b3b" }, { shirt: "#ffffff" }], Y: [{ shirt: "#2f6df0" }] };
+  const tk = { "X · Men": [{ colors: ["#e23b3b"] }, { colors: ["#ffffff", "#1a1a1a"] }], Y: [{ shirt: "#2f6df0" }] };
   const g1 = game("X", "Y", D1, "10:00", 1, { kit: { A: 2, B: 1 } });
   const g2 = game("Y", "X", D1, "09:00", 2, { kit: { A: 1 } });
   const g3 = game("Winner Semifinal 1", "X", D2, "09:00", 1, { round: "Gold medal match" });
@@ -16,7 +16,7 @@ test("teamPlans: per team and category, in time order, with the uniform worn; pl
   assert.deepEqual(plans.map((p) => p.key), ["X · Men", "X · Women", "Y · Men", "Z · Women"]);
   const x = plans[0];
   assert.deepEqual(x.rows.map((r) => r.g.id), [g2.id, g1.id, g3.id]);
-  assert.equal(x.rows[1].kit.shirt, "#ffffff"); // uniform 2 in g1
+  assert.deepEqual(x.rows[1].kit.colors, ["#ffffff", "#1a1a1a"]); // uniform 2 in g1 (striped)
   assert.equal(x.rows[0].kit, null);            // not set in g2
   assert.equal(x.rows[1].opponent.name, "Y");
   assert.deepEqual(planDays([g1, g2, g3]), [D1, D2]);
