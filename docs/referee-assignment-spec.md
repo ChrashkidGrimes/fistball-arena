@@ -38,7 +38,8 @@ Fistball Arena. Read this before touching `src/pages/Referees.jsx`,
   `{ name, first, role, photo, birthday }` — no country, gender, club or
   availability. Imported from the IFA "…DATA.xlsx" (`importExcel.js`): a row
   with role `referee`, or with no `Team` and not a player, is a referee.
-- `Colors.jsx`: each team has up to two uniforms `{shirt, shorts}` (hex) in
+- `Colors.jsx`: each team has up to two uniforms (since main af77280:
+  `{ colors: [hex, …] }`, up to 3 jersey colours; older `{shirt, shorts}`) in
   `public/teamkits_{eid}`; per game `game.kit = { A: 1|2|"", B: 1|2|"" }` via
   `saveGameKit(gameId, side, kit)`. Bulk "uniform of the day" per team. No clash
   detection.
@@ -304,10 +305,14 @@ of kit changes**.
 
 ### 4.2 Definitions
 
-- **Clash**: two kits clash if their shirt colours are too similar. Compute
-  colour distance as ΔE (CIE76 in Lab) between shirt hex values; clash if
-  `ΔE < threshold` (default 35, configurable per event). Only shirts count —
-  shorts are ignored entirely.
+- **Clash**: two kits clash if their jerseys are too similar. Colour distance
+  is ΔE (CIE76 in Lab) between hex values; clash if the jersey distance
+  `< threshold` (default 35, configurable per event). A jersey has 1–3
+  colours (stripes); the jersey distance is the symmetric Hausdorff distance
+  of the two colour sets — small only when **each jersey's colours all appear
+  in the other** (red/white vs white/red clash; plain white vs black/white
+  stripes don't). For plain jerseys it is simply the ΔE of the two colours.
+  Older `{shirt, shorts}` uniforms count by their shirt.
 - **Kit change**: for a team, a change between two consecutive games of that
   team on the same day where the kit differs. (Switching for one game and back
   counts as 2 changes.)
@@ -375,8 +380,9 @@ colour** — one value per game.
   team kits.
 
 **Rules:**
-- **Clash** (hard): the referee shirt clashes with team A's or team B's shirt
-  for that game, using the same ΔE test and threshold as 4.2. Team shirts are
+- **Clash** (hard): the referee shirt clashes with team A's or team B's jersey
+  for that game, using the same jersey distance and threshold as 4.2 (the
+  referee shirt is a one-colour jersey). Team jerseys are
   taken from the game's resolved team kits (proposal or saved `game.kit`).
 - If no referee colour is clash-free for a game → **unresolvable**, reported as
   a warning (grey badge).
