@@ -30,7 +30,7 @@ import { checkAssignments, isKnockout, officialName, DEFAULT_RULES, SLOTS, isReq
 import { isPlaceholder } from "../schedule/advance.js";
 
 // Penalty weights. Ordering per spec §3.5:
-// r2Nation ≫ reserve ≫ (lenient r2Nation) > break > assistantClub > refereeAsAssistantNation > soloAssistant > load > gender > repeat.
+// r2Nation ≫ reserve ≫ (lenient r2Nation) > break > refereeAsAssistantNation > soloAssistant > load > gender > repeat.
 // Empty required slots rank between hard violations and r2Nation (a
 // non-neutral knockout r2 beats an empty one); an empty referee slot is far
 // worse than an empty scorer / line judge slot. A Referee 1 below the game's
@@ -49,7 +49,6 @@ export const DEFAULT_WEIGHTS = {
   maxPerDay: 1000,
   nationClub: 400,  // club competition: referee from the nation of a playing club (above breaks)
   break: 300,       // per extra game in a row (2 in a row)
-  assistantClub: 150,
   refereeAsAssistantNation: 100,
   soloAssistant: 60,       // a line judge not working with their pair partner
   genderUnknown: 50,

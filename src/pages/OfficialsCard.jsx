@@ -102,7 +102,7 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
   return (
     <details className="adv-tool officials-card">
       <summary>Officials ({refs.length}) — roles, nation / club, availability</summary>
-      <p className="muted-sm">Who may fill which slot, conflicts (referees never get games of their own nation or club; assistants are kept away from their own club where possible; for clerks neither matters), and availability per day. Empty roles = any slot; no entry for a day = available all day. Assistant partners always work the lines together. Saved automatically.</p>
+      <p className="muted-sm">Who may fill which slot, conflicts (referees never get games of their own nation; referees, assistants and clerks never get games of their own club), and availability per day. Empty roles = any slot; no entry for a day = available all day. Assistant partners always work the lines together. Saved automatically.</p>
       <datalist id="of-nations">{teamNations.map((n) => <option key={n} value={n} />)}</datalist>
       {filterOn && <p className="muted-sm of-count">{shown.length} of {rows.length} shown · <button className="link-btn" onClick={() => setFlt(NO_FILTER)}>Clear filters</button></p>}
       <div className="grid-scroll">

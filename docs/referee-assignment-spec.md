@@ -253,7 +253,6 @@ score(assignment) = Σ hard violations × ∞  (excluded)
                   + w_reserve   · reserve uses
                   + w_break     · break violations
                   + w_load      · load imbalance
-                  + w_assistantClub · assistants from a playing club
                   + w_soloAssistant · solo assistant uses
                   + w_refereeAsAssistantNation · referees as assistant from a playing nation
                   + w_repeat    · repeats
@@ -261,7 +260,7 @@ score(assignment) = Σ hard violations × ∞  (excluded)
 ```
 
 Weights live in one config object (event-level, editable later), default
-ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_rankUnder > w_break > w_assistantClub > w_refereeAsAssistantNation > w_soloAssistant > w_rankOver > w_load > w_gender > w_repeat`.
+ordering: `w_missingRef ≫ w_r2Nation ≫ w_missing ≫ w_reserve ≫ w_rankUnder > w_break > w_refereeAsAssistantNation > w_soloAssistant > w_rankOver > w_load > w_gender > w_repeat`.
 
 ### 3.6 Solver
 

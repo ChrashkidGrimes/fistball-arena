@@ -122,7 +122,7 @@ test("assistant pairs work together; a pair dissolves when a member is away", ()
   assert.ok(!res.after.list.some((i) => i.code === "pairSplit"));
 });
 
-test("clerk: nation and club don't matter; only filled when a clerk pool exists", () => {
+test("clerk: nation doesn't matter (club does, see rules.test.js); only filled when a clerk pool exists", () => {
   const sr = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark")];
   const g = game();
   assert.equal(at(autoAssign([g], sr, []), g).clerk ?? "", "");
