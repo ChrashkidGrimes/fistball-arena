@@ -346,7 +346,7 @@ function AssignSettings({ settings, courts, archived }) {
   const toggleCourt = (c) => save({ clerk2Courts: settings.clerk2Courts.includes(c) ? settings.clerk2Courts.filter((x) => x !== c) : [...settings.clerk2Courts, c] });
   return (
     <details className="adv-tool" style={{ marginBottom: 10 }}>
-      <summary>Assignment settings — Referee 2: {settings.r2 === "finals" ? "finals only" : "every game"}{settings.clerk2Courts.length ? ` · Clerk 2 on court ${settings.clerk2Courts.join(", ")}` : ""}</summary>
+      <summary>Assignment settings — Referee 2: {settings.r2 === "finals" ? "finals only" : "every game"}{settings.r2NationKo === "lenient" ? " · knockout Referee 2 from a playing nation allowed" : ""}{settings.clerk2Courts.length ? ` · Clerk 2 on court ${settings.clerk2Courts.join(", ")}` : ""}</summary>
       <div className="as-settings">
         <label>Referee 2{" "}
           <select value={settings.r2} disabled={archived} onChange={(e) => save({ r2: e.target.value })}>
