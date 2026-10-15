@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deltaE, checkKits, countChanges, suggestKits, DEFAULT_KIT_RULES } from "./kits.js";
+import { deltaE, jerseyDistance, checkKits, countChanges, suggestKits, DEFAULT_KIT_RULES } from "./kits.js";
 
 const WHITE = "#ffffff", OFFWHITE = "#f4f4f0", BLACK = "#1a1a1a", RED = "#e23b3b", BLUE = "#2f6df0", NAVY = "#1c2c66", YELLOW = "#f2c20a";
-const kit = (shirt, shorts = "") => ({ shirt, shorts });
+const kit = (...colors) => ({ colors }); // a uniform: its jersey colours (src/kits.js)
 let nr = 0;
 const game = (a, b, date, time, over = {}) => ({ id: `g${++nr}`, nr, date, time, teamA: { name: a }, teamB: { name: b }, kit: {}, ...over });
 const kitOf = (res, g) => res.games.find((x) => x.id === g.id).kit;
@@ -19,10 +19,19 @@ test("deltaE: identical 0, white/off-white close, white/black far, invalid = Inf
   assert.equal(deltaE("#fff", WHITE), 0);
 });
 
-test("checkKits: clash and unresolvable; shorts are ignored", () => {
+test("jerseyDistance: plain jerseys = ΔE; striped ones clash only when made of the same colours", () => {
+  assert.equal(jerseyDistance([WHITE], [BLACK]), deltaE(WHITE, BLACK));
+  assert.equal(jerseyDistance([RED, WHITE], [WHITE, RED]), 0);
+  assert.ok(jerseyDistance([RED, WHITE], ["#e0393d", OFFWHITE]) < 35);
+  assert.ok(jerseyDistance([WHITE], [BLACK, WHITE]) > 35); // the black stripes tell them apart
+  assert.ok(jerseyDistance([RED, WHITE], [RED, BLUE]) > 35);
+  assert.equal(jerseyDistance([], [WHITE]), Infinity);
+});
+
+test("checkKits: clash and unresolvable; older { shirt, shorts } uniforms count by their shirt", () => {
   const tk = {
-    W: [kit(WHITE, BLACK), kit(RED, BLACK)],
-    O: [kit(OFFWHITE, BLACK), kit(BLUE, WHITE)],
+    W: [{ shirt: WHITE, shorts: BLACK }, { shirt: RED, shorts: BLACK }],
+    O: [{ shirt: OFFWHITE, shorts: BLACK }, { shirt: BLUE, shorts: WHITE }],
     X: [kit(WHITE)], Y: [kit(OFFWHITE)],
   };
   const g1 = game("W", "O", D1, "10:00", { kit: { A: 1, B: 1 } });
@@ -34,6 +43,12 @@ test("checkKits: clash and unresolvable; shorts are ignored", () => {
   assert.equal(res[g2.id], undefined); // same shorts, different shirts → fine
   assert.equal(res[g3.id].level, "unresolvable");
   assert.equal(res[g4.id], undefined);
+  // Striped jerseys.
+  const tk2 = { S: [kit(RED, WHITE)], T: [kit(WHITE, RED)], U: [kit(RED, BLUE)] };
+  const g5 = game("S", "T", D1, "14:00", { kit: { A: 1, B: 1 } }), g6 = game("S", "U", D1, "15:00", { kit: { A: 1, B: 1 } });
+  const res2 = checkKits([g5, g6], tk2);
+  assert.equal(res2[g5.id].level, "unresolvable");
+  assert.equal(res2[g6.id], undefined);
 });
 
 test("countChanges: switching for one game and back = 2", () => {

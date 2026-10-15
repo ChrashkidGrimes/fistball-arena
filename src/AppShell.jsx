@@ -16,7 +16,7 @@ export default function AppShell({ me, onSignOut }) {
   const [live, setLive] = useState(null);
   const [open, setOpen] = useState(false); // mobile drawer
   useEffect(() => subscribeLivePointer(setLive), []);
-  const onAir = live?.eventId === eventId;
+  const onAir = !!live?.ids?.has(eventId);
   const go = (to) => { setOpen(false); nav(to); };
 
   // active section from the sub-path (after /e/:eventId)

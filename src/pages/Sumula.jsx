@@ -22,7 +22,7 @@ const SECTIONS = [
 export default function Sumula({ me }) {
   const { id } = useParams();
   const nav = useNavigate();
-  const { eventId, canScore, isAdmin, branding, archived } = useEvent();
+  const { eventId, event, canScore, isAdmin, branding, archived } = useEvent();
   const [draft, setDraft] = useState(null);
   const [lockedBy, setLockedBy] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -132,7 +132,7 @@ export default function Sumula({ me }) {
   }
 
   async function downloadPDF() {
-    const blob = await pdf(<SumulaPDF draft={draft} branding={branding} />).toBlob();
+    const blob = await pdf(<SumulaPDF draft={draft} branding={branding} event={event} />).toBlob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -224,7 +224,8 @@ export default function Sumula({ me }) {
       <div>
         {section === "info" && <InfoSection d={draft} />}
         {section === "lineup" && (
-          <LineupSection d={draft} team={team} setTeam={setTeam} update={update} loadRoster={loadRoster} readOnly={readOnly} />
+          <LineupSection d={draft} team={team} setTeam={setTeam} update={update} loadRoster={loadRoster} readOnly={readOnly}
+            onFixNames={isAdmin && !archived ? () => nav(`/e/${eventId}/roster`) : null} />
         )}
         {section === "score" && <ScoreSection d={draft} scoring={scoring} update={update} readOnly={readOnly} />}
         {section === "refs" && <RefsSection d={draft} update={update} refNames={refNames} />}
@@ -285,7 +286,7 @@ function PlayerAvatar({ src, name }) {
   return <span className="avatar avatar-ph">{(name || "?").trim()[0]}</span>;
 }
 
-function LineupSection({ d, team, setTeam, update, loadRoster, readOnly }) {
+function LineupSection({ d, team, setTeam, update, loadRoster, readOnly, onFixNames }) {
   const t = d[team];
   const toggleCaptain = (i) =>
     update((n) => n[team].players.forEach((p, j) => (p.captain = j === i ? !p.captain : false)));
@@ -315,7 +316,8 @@ function LineupSection({ d, team, setTeam, update, loadRoster, readOnly }) {
             ⚠️ No line-up loaded for {short(t.name)}.{" "}
             {readOnly
               ? "Read-only access — the roster couldn't be loaded (event archived or you're not a member of this event)."
-              : "Import the squads (Players & staff → Excel), make sure the team names match, then tap ↻ Load roster."}
+              : <>Players are found by the team's <b>exact</b> name — “{t.name}” must be spelled the same in Players &amp; staff ({d.info?.category}). Import the squads or fix the name, then tap ↻ Load roster.</>}
+            {onFixNames && <div style={{ marginTop: 8 }}><button className="btn sm" onClick={onFixNames}>Fix team names in Players &amp; staff →</button></div>}
           </div>
         )}
         {t.players.map((p, i) => (
