@@ -17,8 +17,10 @@
 //      (exhaustive over the teams with two kits);
 //   2. otherwise the fewest kit changes: DP over the day's time slots, state =
 //      every team's current kit.
-// Objectives (lexicographic): no clash › fewest changes › wear the OTHER kit
-// than the previous day › Uniform 1.
+// Objectives (lexicographic): no clash › fewest changes › a referee shirt
+// (opts.refKits) contrasts with both teams › wear the OTHER kit than the
+// previous day › Uniform 1. The referee-shirt objective never costs a kit
+// change, it only overrides the alternation / Uniform 1 preferences.
 
 import { resolveKit, kitKey, teamKitsFor, kitColors } from "../kits.js";
 import { parseSlots } from "./model.js";
@@ -138,8 +140,8 @@ function dayKitOf(team, dayGames) {
   return tied.includes(lastV) ? lastV : tied[0];
 }
 
-// Lexicographic cost tuples: [clashes, changes, sameAsPrevDay, uniform2].
-const ZERO = [0, 0, 0, 0];
+// Lexicographic cost tuples: [clashes, changes, noRefShirt, sameAsPrevDay, uniform2].
+const ZERO = [0, 0, 0, 0, 0];
 const add = (a, b) => a.map((x, i) => x + b[i]);
 const less = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]; return false; };
 
@@ -147,6 +149,9 @@ export function suggestKits(games, teamKits, opts = {}) {
   teamKits = kitsByTeam(games, teamKits);
   const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
   const maxEx = opts.maxExhaustive ?? DEFAULT_KIT_RULES.maxExhaustive;
+  const refList = usable(opts.refKits);
+  // Does some referee shirt colour contrast with both team jerseys?
+  const refFits = (sA, sB) => !refList.length || refList.some((r) => jerseyDistance([r.shirt], sA) >= th && jerseyDistance([r.shirt], sB) >= th);
   const inScope = (g) => !opts.days?.length || opts.days.includes(g.date);
   const work = [...games].sort(byTime).map((g) => ({ ...g, kit: { ...(g.kit || {}) } }));
   const days = [...new Set(work.map((g) => g.date))].sort((a, b) => dateNum(a) - dateNum(b));
@@ -211,11 +216,15 @@ export function suggestKits(games, teamKits, opts = {}) {
       }
       const tA = tid(g, "A"), tB = tid(g, "B");
       const vA = sideVal(g, "A", state), vB = sideVal(g, "B", state);
-      if (vA && vB && !unres.has(g.id) && jerseyDistance(jerseyOf(vA, teamKits[tA]), jerseyOf(vB, teamKits[tB])) < th) c[0]++;
+      if (vA && vB) {
+        const sA = jerseyOf(vA, teamKits[tA]), sB = jerseyOf(vB, teamKits[tB]);
+        if (!unres.has(g.id) && jerseyDistance(sA, sB) < th) c[0]++;
+        if (sA.length && sB.length && !refFits(sA, sB)) c[2]++;
+      }
       for (const [t, v] of [[tA, vA], [tB, vB]]) {
         if (typeof v !== "number" || !vi.has(t)) continue;
-        if (prevKit.has(t) && prevKit.get(t) === v) c[2]++;
-        if (v === 2) c[3]++;
+        if (prevKit.has(t) && prevKit.get(t) === v) c[3]++;
+        if (v === 2) c[4]++;
       }
       return c;
     };
@@ -254,7 +263,7 @@ export function suggestKits(games, teamKits, opts = {}) {
           for (let s = 0; s < N; s++) {
             const o = s ^ (1 << i);
             if (!d[o]) continue;
-            const cand = add(d[o], [0, 1, 0, 0]);
+            const cand = add(d[o], [0, 1, 0, 0, 0]);
             if (!d[s] || less(cand, d[s])) { d[s] = cand; src[s] = src[o]; }
           }
         }
@@ -315,4 +324,97 @@ export function suggestKits(games, teamKits, opts = {}) {
     unresolvable: Object.keys(after).filter((id) => after[id].level === "unresolvable"),
     clashes: Object.keys(after).filter((id) => after[id].level === "clash"),
   };
+}
+
+/* ---------- referee shirts (spec §4.6) ---------- */
+// refKits: the event's officials' shirt colours [{ id, name, shirt }] — no
+// preference between them. All officials of a game wear one colour: game.kit.R = id.
+
+// Team jerseys actually worn in a game (colour lists; none when not set).
+const teamJerseys = (g, teamKits) => ["A", "B"].map((side) => jerseyOf(g.kit?.[side], teamKitsFor(teamKits, name(side === "A" ? g.teamA : g.teamB), g.category))).filter((j) => j.length);
+// Smallest distance between a referee colour and the team jerseys (Infinity =
+// no team jersey set); a referee clashes with a jersey made of their colour.
+const contrast = (rk, g, teamKits) => Math.min(Infinity, ...teamJerseys(g, teamKits).map((j) => jerseyDistance([rk.shirt], j)));
+const usable = (refKits) => (refKits || []).filter((r) => r?.id && r.shirt);
+
+// Status of each game's CURRENT referee shirt:
+// { [gameId]: { level: "clash" | "unresolvable" | "unknown", msg } }.
+export function checkRefShirts(games, teamKits, refKits, opts = {}) {
+  const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
+  const list = usable(refKits);
+  const out = {};
+  if (!list.length) return out;
+  for (const g of games) {
+    if (!list.some((r) => contrast(r, g, teamKits) >= th)) { out[g.id] = { level: "unresolvable", msg: "No referee shirt colour contrasts with both teams" }; continue; }
+    const id = g.kit?.R;
+    if (!id) continue;
+    const rk = list.find((r) => r.id === id);
+    if (!rk) { out[g.id] = { level: "unknown", msg: "Referee shirt colour no longer exists" }; continue; }
+    const d = contrast(rk, g, teamKits);
+    if (d < th) out[g.id] = { level: "clash", msg: `Referee shirt too similar to a team (ΔE ${Math.round(d)})` };
+  }
+  return out;
+}
+
+// Pick the officials' shirt per game. Run AFTER the team kits are set (pass the
+// games with the team kit proposal applied). Per day:
+//   1. one colour for the whole day if one contrasts with every game;
+//   2. otherwise game by game in time order: fewest officials changing colour
+//      (each official's previous game that day; without officials: the court's
+//      previous game) › best contrast.
+// Exact ties go to the colour used least so far (no colour is preferred).
+// Locked game.kit.R stays unless opts.overwrite.
+// → { proposals: [{ gameId, side: "R", from, to }], games, unresolvable: [gameId] }
+export function suggestRefShirts(games, teamKits, refKits, opts = {}) {
+  const th = opts.threshold ?? DEFAULT_KIT_RULES.threshold;
+  const list = usable(refKits);
+  const inScope = (g) => !opts.days?.length || opts.days.includes(g.date);
+  const work = [...games].sort(byTime).map((g) => ({ ...g, kit: { ...(g.kit || {}) } }));
+  const unresolvable = [];
+  if (!list.length) return { proposals: [], games: work, unresolvable };
+  const locked = (g) => !opts.overwrite && !!g.kit.R && list.some((r) => r.id === g.kit.R);
+  const ok = (r, g) => contrast(r, g, teamKits) >= th;
+  const used = new Map(); // colour id → games so far (neutral tie-break)
+  const fewerUsed = (a, b) => (used.get(a.r.id) || 0) - (used.get(b.r.id) || 0) || String(a.r.id).localeCompare(String(b.r.id));
+  const officials = (g) => ["r1", "r2", "clerk", "a1", "a2"].map((s) => String(g.refs?.[s] ?? "").trim().toLowerCase()).filter(Boolean);
+
+  for (const date of [...new Set(work.map((g) => g.date))]) {
+    const day = work.filter((g) => g.date === date);
+    const todo = day.filter((g) => inScope(g) && !locked(g));
+    if (!todo.length) continue;
+    const solvable = todo.filter((g) => list.some((r) => ok(r, g)));
+    for (const g of todo) if (!solvable.includes(g)) unresolvable.push(g.id);
+
+    // 1. One colour for the whole day (that also fits the locked games).
+    const fixed = day.filter((g) => !todo.includes(g) && g.kit.R).map((g) => g.kit.R);
+    const allDay = list
+      .filter((r) => solvable.every((g) => ok(r, g)) && fixed.every((id) => id === r.id))
+      .map((r) => ({ r, c: Math.min(...solvable.map((g) => contrast(r, g, teamKits))) }))
+      .sort((a, b) => b.c - a.c || fewerUsed(a, b))[0];
+    if (allDay) {
+      for (const g of solvable) g.kit.R = allDay.r.id;
+      used.set(allDay.r.id, (used.get(allDay.r.id) || 0) + solvable.length);
+      continue;
+    }
+
+    // 2. Game by game.
+    const lastOf = new Map(); // official or "court:N" → colour id
+    for (const g of day) {
+      const who = officials(g);
+      const keys = who.length ? who : ["court:" + g.court];
+      if (solvable.includes(g)) {
+        const best = list
+          .map((r) => ({ r, c: contrast(r, g, teamKits), ch: keys.filter((k) => lastOf.has(k) && lastOf.get(k) !== r.id).length }))
+          .filter((x) => x.c >= th)
+          .sort((a, b) => a.ch - b.ch || b.c - a.c || fewerUsed(a, b))[0];
+        g.kit.R = best.r.id;
+        used.set(best.r.id, (used.get(best.r.id) || 0) + 1);
+      }
+      if (g.kit.R) for (const k of keys) lastOf.set(k, g.kit.R);
+    }
+  }
+
+  const orig = new Map(games.map((g) => [g.id, g.kit?.R ?? ""]));
+  const proposals = work.filter((g) => (g.kit.R ?? "") !== orig.get(g.id)).map((g) => ({ gameId: g.id, side: "R", from: orig.get(g.id), to: g.kit.R ?? "" }));
+  return { proposals, games: work, unresolvable };
 }

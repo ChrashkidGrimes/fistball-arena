@@ -920,6 +920,14 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .kit-badge { display: inline-block; margin-top: 3px; border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 800; }
 .kit-badge.kb-clash { background: #fbeaec; color: var(--r); border: 1px solid var(--r); }
 .kit-badge.kb-unres { background: #eef0f6; color: var(--muted); border: 1px solid var(--line); }
+.rs-list { display: grid; gap: 6px; }
+.rs-row { display: flex; align-items: center; gap: 6px; }
+.rs-row .cpick { margin-left: 0; }
+.rs-pick { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.rs-sw { width: 24px; height: 24px; border-radius: 6px; border: 1px solid rgba(0,0,0,.2); box-shadow: 0 0 0 1px #fff inset; cursor: pointer; padding: 0; opacity: .45; }
+.rs-sw.on { opacity: 1; outline: 2px solid var(--brand); outline-offset: 2px; }
+.rs-sw:not(:disabled):hover { opacity: 1; }
+.rs-sw:disabled { cursor: default; }
 .sk-seq { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .sk-item { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; padding: 1px 4px; border-radius: 6px; }
 .sk-item.sk-new { background: #efeaf9; font-weight: 700; }
