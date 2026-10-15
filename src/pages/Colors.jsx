@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { subscribeGames, saveGameKit, subscribeTeamKits, setTeamKits, updateEventFields, subscribeRefKits, setRefKits } from "../cloud.js";
 import { resolveKit, kitKey, teamKitsFor, kitColors, MAX_KIT_COLORS } from "../kits.js";
-import { KitSwatch } from "../KitSwatch.jsx";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
 import { checkKits, checkRefShirts, countChanges, DEFAULT_KIT_RULES } from "../officials/kits.js";
@@ -50,6 +49,32 @@ function ColorPick({ value, disabled, onPick, what = "jersey" }) {
             <button type="button" className="cpick-clear" onClick={() => { onPick(""); close(); }}>Clear</button>
           </div>
         </>, document.body)}
+    </span>
+  );
+}
+
+// Which uniform a team wears: one button per registered uniform showing its
+// jersey colours; click to pick, click the picked one again to clear. A stored
+// value the team no longer has (removed uniform, old single shirt colour) gets
+// its own button to clear it.
+function KitPick({ value, kits, disabled, label, onPick }) {
+  const options = [1, 2].map((n) => resolveKit(n, kits)).filter(Boolean);
+  const stale = value && !options.some((k) => k.n === value);
+  return (
+    <span className="rs-pick kit-pick" role="group" aria-label={label}>
+      {options.map((k) => {
+        const on = k.n === value;
+        return (
+          <button key={k.n} type="button" className={`kp-sw ${on ? "on" : ""}`} disabled={disabled} aria-pressed={on}
+            title={`Uniform ${k.n}${on ? " — click to clear" : ""}`} aria-label={`Uniform ${k.n}`} onClick={() => onPick(on ? "" : k.n)}>
+            {k.colors.map((c, i) => <span key={i} style={{ background: c }} />)}
+          </button>
+        );
+      })}
+      {!options.length && <span className="muted-sm">no uniforms registered</span>}
+      {stale && (typeof value === "string"
+        ? <button type="button" className="kp-sw on" disabled={disabled} style={{ background: value }} title="Shirt colour from an older version — click to clear" onClick={() => onPick("")} />
+        : <button type="button" className="btn sm" disabled={disabled} title="This uniform was removed from the team" onClick={() => onPick("")}>Uniform {value} (removed) ✕</button>)}
     </span>
   );
 }
@@ -162,16 +187,8 @@ export default function Colors() {
     const team = side === "A" ? g.teamA?.name : g.teamB?.name;
     const v = g.kit?.[side];
     return (
-      <>
-        <KitSwatch kit={resolveKit(v, teamKitsFor(teamKits, team, g.category))} size={16} />
-        <select className="kit-sel" value={typeof v === "number" ? String(v) : v ? "legacy" : ""} disabled={archived}
-          onChange={(e) => setKit(g, side, e.target.value ? Number(e.target.value) : "")} aria-label={`Uniform for ${shortTeam({ name: team })}`}>
-          <option value="">—</option>
-          <option value="1">Uniform 1</option>
-          <option value="2">Uniform 2</option>
-          {typeof v === "string" && v && <option value="legacy" disabled>Shirt only (old)</option>}
-        </select>
-      </>
+      <KitPick value={v} kits={teamKitsFor(teamKits, team, g.category)} disabled={archived}
+        label={`Uniform for ${shortTeam({ name: team })}`} onPick={(n) => setKit(g, side, n)} />
     );
   };
 
@@ -233,12 +250,10 @@ export default function Colors() {
               <option value="all">Every day</option>
               {days.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
             </select>
-            <select className="ag-role" value={bulk.kit} onChange={(e) => setBulk({ ...bulk, kit: e.target.value })}>
-              <option value="">— none —</option>
-              <option value="1">Uniform 1</option>
-              <option value="2">Uniform 2</option>
-            </select>
-            <KitSwatch kit={resolveKit(Number(bulk.kit), teamByKey.get(bulk.team) && teamKitsFor(teamKits, teamByKey.get(bulk.team).name, teamByKey.get(bulk.team).category))} size={18} />
+            {bulk.team
+              ? <KitPick value={Number(bulk.kit) || ""} kits={teamKitsFor(teamKits, teamByKey.get(bulk.team)?.name, teamByKey.get(bulk.team)?.category)}
+                  label="Uniform of the day" onPick={(n) => setBulk({ ...bulk, kit: n ? String(n) : "" })} />
+              : <span className="muted-sm">— pick a team to see its uniforms —</span>}
             <button className="btn sm" onClick={applyBulk}>Apply</button>
           </div>
         </div>
