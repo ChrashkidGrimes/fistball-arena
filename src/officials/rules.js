@@ -23,7 +23,7 @@ export const SLOT_LABEL = { r1: "Referee 1", r2: "Referee 2", clerk: "Clerk", cl
 export const DEFAULT_RULES = {
   softInRow: 2, // this many consecutive rounds → warning (a free round after every game is preferred)
   hardInRow: 3, // this many consecutive rounds → hard violation
-  r2: "always", clerk2Courts: [], finalRefsOnLines: true, gameMinutes: 45,
+  r2: "always", clerk2Courts: [], finalRefsOnLines: true, gameMinutes: 45, r2NationKo: "lastResort",
 };
 
 // Clerks may work game after game (stable table crews), court managers look
@@ -140,7 +140,8 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       else if (av.status === "reserve") add(g.id, slot, "soft", "reserve", "Reserve this day");
 
       // 1. Nation: hard for r1 always and r2 in group games; r2 in knockout
-      // games is a warning (only if no neutral referee is available). In club
+      // games is a warning (by default only if no neutral referee is
+      // available, see officialsSettings r2NationKo). In club
       // competitions the nation of a club only counts as a strong warning.
       // Scorers and line judges: nation doesn't matter — except a referee
       // working the lines for their own nation (warning).
@@ -148,7 +149,9 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       if (nation) {
         if (isRef && isClubGame(g)) add(g.id, slot, "soft", "nationClub", `Same nation as a club (${o.country})`);
         else if (slot === "r1" || (slot === "r2" && !ko)) add(g.id, slot, "hard", "nation", `Same nation as a team (${o.country})`);
-        else if (slot === "r2") add(g.id, slot, "soft", "r2Nation", `Same nation as a team (${o.country}) — only if no neutral referee is available`);
+        else if (slot === "r2") add(g.id, slot, "soft", "r2Nation", cfg.r2NationKo === "lenient"
+          ? `Same nation as a team (${o.country}) — allowed in knockout games`
+          : `Same nation as a team (${o.country}) — only if no neutral referee is available`);
         else if (isAssistant && hasRole(o, "referee")) add(g.id, slot, "soft", "refereeAsAssistantNation", `Referee as assistant for own nation (${o.country})`);
       }
 

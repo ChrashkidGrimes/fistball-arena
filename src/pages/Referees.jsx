@@ -340,7 +340,7 @@ function LoadOverview({ games, days, dayLabel }) {
 // officials/model.js officialsSettings). Saved right away.
 function AssignSettings({ settings, courts, archived }) {
   const save = (patch) => {
-    const next = { r2: settings.r2, clerk2Courts: settings.clerk2Courts, finalRefsOnLines: settings.finalRefsOnLines, ...patch };
+    const next = { r2: settings.r2, clerk2Courts: settings.clerk2Courts, finalRefsOnLines: settings.finalRefsOnLines, r2NationKo: settings.r2NationKo, ...patch };
     updateEventFields({ officialsRules: next }).catch((e) => alert("Could not save: " + (e?.code || e?.message || e)));
   };
   const toggleCourt = (c) => save({ clerk2Courts: settings.clerk2Courts.includes(c) ? settings.clerk2Courts.filter((x) => x !== c) : [...settings.clerk2Courts, c] });
@@ -354,6 +354,13 @@ function AssignSettings({ settings, courts, archived }) {
             <option value="finals">only semifinals, bronze / 3rd place and final</option>
           </select>
           <span className="muted-sm"> — elsewhere you can still add one by hand.</span>
+        </label>
+        <label>Knockout: Referee 2 from a playing nation{" "}
+          <select value={settings.r2NationKo} disabled={archived} onChange={(e) => save({ r2NationKo: e.target.value })}>
+            <option value="lastResort">only if no neutral referee is available</option>
+            <option value="lenient">allowed — about as bad as no break (helps balance the load)</option>
+          </select>
+          <span className="muted-sm"> — Referee 1 is always neutral; group games always need a neutral Referee 2.</span>
         </label>
         <div>Second clerk on courts:{" "}
           {courts.length ? courts.map((c) => (

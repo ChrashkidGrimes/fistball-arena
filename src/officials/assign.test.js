@@ -37,6 +37,25 @@ test("knockout r2 from a playing nation only when no neutral referee is availabl
   assert.deepEqual(res.unfilled.map((u) => u.slot), ["r2"]);
 });
 
+test("knockout r2 from a playing nation, setting lenient: about as bad as a missing break", () => {
+  const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Gerd", "Germany")];
+  const before = game({ teamA: { name: "Austria" }, teamB: { name: "Italy" }, refs: { r1: "Sepp Ref", r2: "Dan Ref" } });
+  const ko = game({ time: "11:00", round: "Semifinal 1" });
+  // Default: a neutral referee works a second game in a row.
+  const r = at(autoAssign([before, ko], offs, []), ko);
+  assert.deepEqual(new Set([r.r1, r.r2]), new Set(["Sepp Ref", "Dan Ref"]));
+  // Lenient: the rested German referee takes Referee 2 (Referee 1 stays neutral).
+  const res = autoAssign([before, ko], offs, [], { rules: { r2NationKo: "lenient" } });
+  const l = at(res, ko);
+  assert.equal(l.r2, "Gerd Ref");
+  assert.ok(["Sepp Ref", "Dan Ref"].includes(l.r1));
+  assert.equal(res.after.counts.hard, 0);
+  // Group games stay hard in either mode.
+  const grp = game({ time: "13:00" });
+  const g = at(autoAssign([grp], [ref("Sepp", "Switzerland"), ref("Gerd", "Germany")], [], { rules: { r2NationKo: "lenient" } }), grp);
+  assert.equal(g.r2 ?? "", "");
+});
+
 test("women's final gets a female referee", () => {
   const offs = [ref("Sepp", "Switzerland"), ref("Dan", "Denmark"), ref("Ida", "Italy", { gender: "f" })];
   const g = game({ category: "National Teams Women", round: "Gold medal match" });

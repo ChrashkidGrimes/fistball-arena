@@ -164,6 +164,10 @@ export function officialsSettings(event) {
     r2: r.r2 === "finals" ? "finals" : "always",
     clerk2Courts: Array.isArray(r.clerk2Courts) ? r.clerk2Courts.map(String) : [],
     finalRefsOnLines: r.finalRefsOnLines !== false,
+    // Knockout Referee 2 from a playing nation: "lastResort" = only if no
+    // neutral referee fits; "lenient" = about as bad as a missing break
+    // (as in the Reiden tool, helps balance the load).
+    r2NationKo: r.r2NationKo === "lenient" ? "lenient" : "lastResort",
     gameMinutes: Number(event?.slots?.gameMinutes) || 45,
   };
 }

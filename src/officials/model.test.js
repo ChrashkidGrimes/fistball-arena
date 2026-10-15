@@ -137,7 +137,7 @@ test("gold final, club games and the event settings", () => {
     [true, true, true, false, false, false, false]);
   assert.equal(isClubGame({ category: "Clubs U18 Men" }), true);
   assert.equal(isClubGame({ category: "National Teams U18 Men" }), false);
-  assert.deepEqual(officialsSettings({}), { r2: "always", clerk2Courts: [], finalRefsOnLines: true, gameMinutes: 45 });
-  assert.deepEqual(officialsSettings({ officialsRules: { r2: "finals", clerk2Courts: [1, "2"], finalRefsOnLines: false }, slots: { gameMinutes: 60 } }),
-    { r2: "finals", clerk2Courts: ["1", "2"], finalRefsOnLines: false, gameMinutes: 60 });
+  assert.deepEqual(officialsSettings({}), { r2: "always", clerk2Courts: [], finalRefsOnLines: true, r2NationKo: "lastResort", gameMinutes: 45 });
+  assert.deepEqual(officialsSettings({ officialsRules: { r2: "finals", clerk2Courts: [1, "2"], finalRefsOnLines: false, r2NationKo: "lenient" }, slots: { gameMinutes: 60 } }),
+    { r2: "finals", clerk2Courts: ["1", "2"], finalRefsOnLines: false, r2NationKo: "lenient", gameMinutes: 60 });
 });

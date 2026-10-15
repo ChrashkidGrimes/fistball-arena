@@ -43,6 +43,8 @@ test("nation: hard for r1, hard for r2 in group games, soft for r2 in knockout",
   assert.deepEqual(codes(res, g1, "r1"), ["hard:nation"]);
   assert.deepEqual(codes(res, g2, "r2"), ["hard:nation"]);
   assert.deepEqual(codes(res, g3, "r2"), ["soft:r2Nation"]);
+  const lenient = checkAssignments([g3], officials, [], { r2NationKo: "lenient" }).list.find((i) => i.code === "r2Nation");
+  assert.match(lenient.msg, /allowed in knockout games/);
   assert.deepEqual(codes(res, g4, "r1"), ["hard:nation"]);
 });
 

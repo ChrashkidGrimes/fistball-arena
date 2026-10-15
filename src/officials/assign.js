@@ -30,7 +30,7 @@ import { checkAssignments, isKnockout, officialName, DEFAULT_RULES, SLOTS, isReq
 import { isPlaceholder } from "../schedule/advance.js";
 
 // Penalty weights. Ordering per spec §3.5:
-// r2Nation ≫ reserve ≫ break > assistantClub > refereeAsAssistantNation > soloAssistant > load > gender > repeat.
+// r2Nation ≫ reserve ≫ (lenient r2Nation) > break > assistantClub > refereeAsAssistantNation > soloAssistant > load > gender > repeat.
 // Empty required slots rank between hard violations and r2Nation (a
 // non-neutral knockout r2 beats an empty one); an empty referee slot is far
 // worse than an empty scorer / line judge slot. A Referee 1 below the game's
@@ -41,6 +41,7 @@ export const DEFAULT_WEIGHTS = {
   missingRef: 5e5,  // empty Referee 1 / 2
   missing: 2e4,     // empty required Clerk / Assistant
   r2Nation: 1e5,    // knockout r2 from a playing nation
+  r2NationLenient: 305, // the same with the event setting "lenient" (Reiden): a bit worse than a missing break
   reserve: 1e4,
   pairSplit: 2000,  // splitting an intact assistant pair
   finalLines: 3000, // a non-referee on the lines of the final (when referees work the lines)
@@ -72,15 +73,16 @@ const teamKey = (t) => norm(String(t?.name ?? t ?? ""));
 // pass; swaps between games don't change anyone's game count.
 export function gridScore(games, officials, entries, w = DEFAULT_WEIGHTS, rules = DEFAULT_RULES) {
   const res = checkAssignments(games, officials, entries, rules);
-  return { res, score: scoreOf(res, games, officials, w) };
+  return { res, score: scoreOf(res, games, officials, w, rules) };
 }
 const SOFT_WEIGHT = { r2Nation: "r2Nation", reserve: "reserve", inRow: "break", refereeAsAssistantNation: "refereeAsAssistantNation", maxPerDay: "maxPerDay", pairSplit: "pairSplit", gender: "genderUnknown", nationClub: "nationClub", finalLines: "finalLines" };
-function scoreOf(res, games, officials, w) {
+function scoreOf(res, games, officials, w, rules) {
   let s = 0;
   for (const i of res.list) {
     if (i.code === "missing") { s += i.slot === "r1" || i.slot === "r2" ? w.missingRef : w.missing; continue; }
     if (i.code === "rank") { s += w.rankUnder * (i.gap || 1); continue; }
-    s += i.level === "hard" ? w.hard : w[SOFT_WEIGHT[i.code]] || 0;
+    const key = i.code === "r2Nation" && rules.r2NationKo === "lenient" ? "r2NationLenient" : SOFT_WEIGHT[i.code];
+    s += i.level === "hard" ? w.hard : w[key] || 0;
   }
   const byName = new Map(officials.map((o) => [norm(officialName(o)), o]));
   const seen = new Map();
@@ -220,7 +222,7 @@ export function autoAssign(games, officials, entries, opts = {}) {
       if (nation && isClubGame(g)) c += w.nationClub; // club competition: only a strong warning
       else if (nation) {
         if (slot === "r1" || !isKnockout(g)) return null;
-        c += w.r2Nation;
+        c += rules.r2NationKo === "lenient" ? w.r2NationLenient : w.r2Nation;
       }
       if (isWomensGame(g) && o.gender === "f") c -= w.gender;
       const diff = rankLevel(rankOf(o)) - rankLevel(gameRank(g));
