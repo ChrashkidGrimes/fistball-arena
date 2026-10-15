@@ -12,15 +12,40 @@
 import {
   SLOT_ROLE, ROLE_LABEL, parseRoles, canFill, availabilityOn, availableAt, parseSlots,
   teamMeta, sameCountry, sameClub, isWomenFinal, RANK_LABEL, rankOf, rankLevel, gameRank,
+  isFinalsRound, isGoldFinal, isClubGame, windowLabel, minutesOn,
 } from "./model.js";
 
-export const SLOTS = ["r1", "r2", "clerk", "a1", "a2", "cm"];
-export const SLOT_LABEL = { r1: "Referee 1", r2: "Referee 2", clerk: "Clerk", a1: "Assistant 1", a2: "Assistant 2", cm: "Court manager" };
+export const SLOTS = ["r1", "r2", "clerk", "clerk2", "a1", "a2", "cm"];
+export const SLOT_LABEL = { r1: "Referee 1", r2: "Referee 2", clerk: "Clerk", clerk2: "Clerk 2", a1: "Assistant 1", a2: "Assistant 2", cm: "Court manager" };
 
+// Plus the event settings (model.js officialsSettings): r2, clerk2Courts,
+// finalRefsOnLines, gameMinutes, dayMinutes.
 export const DEFAULT_RULES = {
   softInRow: 2, // this many consecutive rounds → warning (a free round after every game is preferred)
   hardInRow: 3, // this many consecutive rounds → hard violation
+  r2: "always", clerk2Courts: [], finalRefsOnLines: true, gameMinutes: 45, dayMinutes: {}, r2NationKo: "lastResort",
 };
+
+// Clerks may work game after game (stable table crews), court managers look
+// after many games — neither counts for games in a row.
+const NO_BREAK_SLOTS = new Set(["clerk", "clerk2", "cm"]);
+
+// Is this slot required in this game? (Referee 1 always; Referee 2 always or
+// only in the finals rounds; the others when someone has that role; Clerk 2
+// only on the courts set for it.)
+export function isRequiredSlot(game, slot, pools, cfg = DEFAULT_RULES) {
+  switch (slot) {
+    case "r1": return true;
+    case "r2": return cfg.r2 !== "finals" || isFinalsRound(game?.round);
+    case "a1": case "a2": return !!pools.assistant;
+    case "clerk": return !!pools.clerk;
+    case "clerk2": return !!pools.clerk && (cfg.clerk2Courts || []).map(String).includes(String(game?.court));
+    case "cm": return !!pools.courtManager;
+    default: return false;
+  }
+}
+// In the final, the referees work the lines (event setting).
+export const refsOnLines = (game, cfg = DEFAULT_RULES) => cfg.finalRefsOnLines !== false && isGoldFinal(game?.round);
 
 const norm = (s) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 export const officialName = (o) => [o?.first, o?.name].filter(Boolean).join(" ").trim();
@@ -45,9 +70,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
   const cfg = { ...DEFAULT_RULES, ...opts };
   const byName = new Map();
   for (const o of officials || []) { const k = norm(officialName(o)); if (k && !byName.has(k)) byName.set(k, o); }
-  const assistantPool = poolHas(officials || [], "assistant");
-  const clerkPool = poolHas(officials || [], "clerk");
-  const courtManagerPool = poolHas(officials || [], "courtManager");
+  const pools = { assistant: poolHas(officials || [], "assistant"), clerk: poolHas(officials || [], "clerk"), courtManager: poolHas(officials || [], "courtManager") };
 
   const cells = {};
   const list = [];
@@ -84,14 +107,14 @@ export function checkAssignments(games, officials, entries, opts = {}) {
     for (const slot of SLOTS) {
       const raw = String(refs[slot] ?? "").trim();
       if (!raw) {
-        const mandatory = slot === "r1" || slot === "r2" || ((slot === "a1" || slot === "a2") && assistantPool) || (slot === "clerk" && clerkPool) || (slot === "cm" && courtManagerPool);
-        if (mandatory) add(g.id, slot, "hard", "missing", `${SLOT_LABEL[slot]} is required`);
+        if (isRequiredSlot(g, slot, pools, cfg)) add(g.id, slot, "hard", "missing", `${SLOT_LABEL[slot]} is required`);
         continue;
       }
       const k = norm(raw);
       const o = byName.get(k);
       const isRef = slot === "r1" || slot === "r2";
       const isAssistant = slot === "a1" || slot === "a2";
+      const isClerk = slot === "clerk" || slot === "clerk2";
 
       // 4. Double booking — twice in this game, or another game at the same start time.
       const twice = SLOTS.filter((s) => s !== slot && norm(refs[s]) === k);
@@ -104,32 +127,38 @@ export function checkAssignments(games, officials, entries, opts = {}) {
 
       if (!o) continue; // not in the registry → nothing else to check
 
-      // 5. Role not allowed (only when roles are set).
-      if (!canFill(o, slot)) add(g.id, slot, "hard", "role", `Not allowed as ${ROLE_LABEL[SLOT_ROLE[slot]].toLowerCase()} (roles: ${parseRoles(o.roles).map((x) => ROLE_LABEL[x]).join(", ")})`);
+      // 5. Role not allowed (only when roles are set). In the final the
+      // referees may work the lines; assistants who aren't referees get a warning.
+      const finalLines = isAssistant && refsOnLines(g, cfg);
+      if (finalLines && !hasRole(o, "referee")) add(g.id, slot, "soft", "finalLines", "Final: the referees work the lines");
+      if (!canFill(o, slot) && !(finalLines && hasRole(o, "referee"))) add(g.id, slot, "hard", "role", `Not allowed as ${ROLE_LABEL[SLOT_ROLE[slot]].toLowerCase()} (roles: ${parseRoles(o.roles).map((x) => ROLE_LABEL[x]).join(", ")})`);
 
       // 3. Availability.
       const av = availabilityOn(o, g.date);
       if (av.status === "unavailable") add(g.id, slot, "hard", "unavailable", "Not available this day");
-      else if (!availableAt(o, g.date, g.time)) add(g.id, slot, "hard", "unavailable", `Only available at ${av.slots.join(", ")}`);
+      else if (!availableAt(o, g.date, g.time, minutesOn(cfg, g.date))) add(g.id, slot, "hard", "unavailable", `Only available ${windowLabel(av) || "at " + av.slots.join(", ")}`);
       else if (av.status === "reserve") add(g.id, slot, "soft", "reserve", "Reserve this day");
 
       // 1. Nation: hard for r1 always and r2 in group games; r2 in knockout
-      // games is a warning (only if no neutral referee is available).
+      // games is a warning (by default only if no neutral referee is
+      // available, see officialsSettings r2NationKo). In club
+      // competitions the nation of a club only counts as a strong warning.
       // Scorers and line judges: nation doesn't matter — except a referee
       // working the lines for their own nation (warning).
       const nation = o.country && [metaA.country, metaB.country].find((c) => sameCountry(o.country, c));
       if (nation) {
-        if (slot === "r1" || (slot === "r2" && !ko)) add(g.id, slot, "hard", "nation", `Same nation as a team (${o.country})`);
-        else if (slot === "r2") add(g.id, slot, "soft", "r2Nation", `Same nation as a team (${o.country}) — only if no neutral referee is available`);
+        if (isRef && isClubGame(g)) add(g.id, slot, "soft", "nationClub", `Same nation as a club (${o.country})`);
+        else if (slot === "r1" || (slot === "r2" && !ko)) add(g.id, slot, "hard", "nation", `Same nation as a team (${o.country})`);
+        else if (slot === "r2") add(g.id, slot, "soft", "r2Nation", cfg.r2NationKo === "lenient"
+          ? `Same nation as a team (${o.country}) — allowed in knockout games`
+          : `Same nation as a team (${o.country}) — only if no neutral referee is available`);
         else if (isAssistant && hasRole(o, "referee")) add(g.id, slot, "soft", "refereeAsAssistantNation", `Referee as assistant for own nation (${o.country})`);
       }
 
-      // 2. Club: hard for referees, warning for line judges, irrelevant for the scorer.
+      // 2. Club: members of a playing club never officiate that game —
+      // referees, assistants and clerks (court managers aren't affected).
       const club = o.club && [metaA.club, metaB.club].find((c) => sameClub(o.club, c));
-      if (club) {
-        if (isRef) add(g.id, slot, "hard", "club", `Same club as a team (${o.club})`);
-        else if (isAssistant) add(g.id, slot, "soft", "assistantClub", `Assistant from a playing club (${o.club})`);
-      }
+      if (club && (isRef || isAssistant || isClerk)) add(g.id, slot, "hard", "club", `Same club as a team (${o.club})`);
 
       // Rank: Referee 1 should have at least the game's rank (warning).
       if (slot === "r1") {
@@ -162,8 +191,8 @@ export function checkAssignments(games, officials, entries, opts = {}) {
     }
   }
 
-  // Per person and day: games in a row, and maxPerDay (court manager duty
-  // doesn't count — they look after many games in a row by design).
+  // Per person and day: games in a row (not for clerk and court manager duty)
+  // and maxPerDay (not for court manager duty).
   for (const [k, all] of work) {
     const o = byName.get(k);
     const ws = all.filter((w) => w.slot !== "cm");
@@ -172,8 +201,9 @@ export function checkAssignments(games, officials, entries, opts = {}) {
     for (const [date, dws] of byDay) {
       const idx = roundIdx.get(date);
       // One entry per round (a double booking is reported above).
-      const seen = new Map();
-      for (const w of dws) { const i = idx.get(timeKey(w.game.time)); if (!seen.has(i)) seen.set(i, w); }
+      const roundsOf = (list) => { const m = new Map(); for (const w of list) { const i = idx.get(timeKey(w.game.time)); if (!m.has(i)) m.set(i, w); } return m; };
+      const all = roundsOf(dws);
+      const seen = roundsOf(dws.filter((w) => !NO_BREAK_SLOTS.has(w.slot)));
       const rounds = [...seen.keys()].sort((a, b) => a - b);
       let run = 0;
       rounds.forEach((r, j) => {
@@ -182,10 +212,11 @@ export function checkAssignments(games, officials, entries, opts = {}) {
         if (run >= cfg.hardInRow) add(w.game.id, w.slot, "hard", "inRow", `${run} games in a row — needs a break (max ${cfg.hardInRow - 1})`);
         else if (run >= cfg.softInRow) add(w.game.id, w.slot, "soft", "inRow", `${run} games in a row — a break after every game is preferred`);
       });
-      if (o?.maxPerDay && rounds.length > o.maxPerDay) {
-        rounds.slice(o.maxPerDay).forEach((r) => {
-          const w = seen.get(r);
-          add(w.game.id, w.slot, "soft", "maxPerDay", `More than ${o.maxPerDay} games this day (${rounds.length})`);
+      const dayRounds = [...all.keys()].sort((a, b) => a - b);
+      if (o?.maxPerDay && dayRounds.length > o.maxPerDay) {
+        dayRounds.slice(o.maxPerDay).forEach((r) => {
+          const w = all.get(r);
+          add(w.game.id, w.slot, "soft", "maxPerDay", `More than ${o.maxPerDay} games this day (${dayRounds.length})`);
         });
       }
     }

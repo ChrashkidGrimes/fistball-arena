@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  parseRoles, parseGender, rolesOf, canFill, availabilityOn, availableAt, parseSlots,
+  parseRoles, parseGender, rolesOf, canFill, availabilityOn, availableAt, parseSlots, windowLabel,
+  isGoldFinal, isClubGame, officialsSettings, minutesOn,
   teamMeta, sameCountry, sameClub, isWomensGame, isFinalsRound, isWomenFinal,
   rankOf, parseRank, gameRank, defaultGameRank,
 } from "./model.js";
@@ -37,7 +38,7 @@ test("availability: missing date = available any time; slots whitelist; reserve 
     "13/09/26": { status: "reserve" },
     "14/09/26": { status: "available", slots: ["10:30", "11:45"] },
   } };
-  assert.deepEqual(availabilityOn(o, "11/09/26"), { status: "available", slots: [] });
+  assert.deepEqual(availabilityOn(o, "11/09/26"), { status: "available", from: "", to: "", slots: [] });
   assert.equal(availableAt(o, "11/09/26", "09:00"), true);
   assert.equal(availableAt(o, "12/09/26", "09:00"), false);
   assert.equal(availableAt(o, "13/09/26", "09:00"), true);
@@ -117,4 +118,31 @@ test("ranks: referee default normal; games top for semifinal / bronze / final, e
   for (const round of ["Qualification round", "Quarterfinal 1", "Placement 5-6"]) assert.equal(defaultGameRank({ round }), "normal", round);
   assert.equal(gameRank({ round: "Qualification round", rank: "good" }), "good");
   assert.equal(gameRank({ round: "Gold medal match", rank: "normal" }), "normal");
+});
+
+test("time window: the whole game (start + length) must fit; from / to optional", () => {
+  const o = { availability: { "12/09/26": { from: "12:00", to: "15:00" }, "13/09/26": { to: "11:00" } } };
+  assert.equal(availableAt(o, "12/09/26", "11:30", 45), false); // starts before
+  assert.equal(availableAt(o, "12/09/26", "12:00", 45), true);
+  assert.equal(availableAt(o, "12/09/26", "14:15", 45), true);  // ends 15:00
+  assert.equal(availableAt(o, "12/09/26", "14:30", 45), false); // ends 15:15
+  assert.equal(availableAt(o, "13/09/26", "10:00", 60), true);
+  assert.equal(availableAt(o, "13/09/26", "10:30", 60), false);
+  assert.equal(availableAt(o, "14/09/26", "08:00", 60), true);  // no entry = all day
+  assert.deepEqual([windowLabel({ from: "12:00", to: "15:00" }), windowLabel({ from: "12:00" }), windowLabel({ to: "15:00" }), windowLabel({})], ["12:00–15:00", "from 12:00", "until 15:00", ""]);
+});
+
+test("gold final, club games and the event settings", () => {
+  assert.deepEqual(["Gold medal match", "Final", "Finale", "Semifinal 1", "Bronze medal match", "Placement 3-5", "Qualification round"].map(isGoldFinal),
+    [true, true, true, false, false, false, false]);
+  assert.equal(isClubGame({ category: "Clubs U18 Men" }), true);
+  assert.equal(isClubGame({ category: "National Teams U18 Men" }), false);
+  assert.deepEqual(officialsSettings({}), { r2: "always", clerk2Courts: [], finalRefsOnLines: true, r2NationKo: "lastResort", gameMinutes: 45, dayMinutes: {} });
+  assert.deepEqual(officialsSettings({ officialsRules: { r2: "finals", clerk2Courts: [1, "2"], finalRefsOnLines: false, r2NationKo: "lenient" }, slots: { gameMinutes: 60 } }),
+    { r2: "finals", clerk2Courts: ["1", "2"], finalRefsOnLines: false, r2NationKo: "lenient", gameMinutes: 60, dayMinutes: {} });
+  // A day with its own game length (e.g. finals day, best of 5).
+  const st = officialsSettings({ slots: { gameMinutes: 45, days: [{ date: "12/09/26" }, { date: "13/09/26", gameMinutes: 70 }] } });
+  assert.deepEqual(st.dayMinutes, { "13/09/26": 70 });
+  assert.equal(minutesOn(st, "12/09/26"), 45);
+  assert.equal(minutesOn(st, "13/09/26"), 70);
 });

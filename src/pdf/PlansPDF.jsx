@@ -5,7 +5,7 @@ import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 // left out — the built-in PDF fonts have no emoji; colours are drawn.
 
 const PURPLE = "#3a2d6b", LINE = "#8a90a2", LIGHT = "#eceef3";
-const SLOT_LABEL = { r1: "Referee 1", r2: "Referee 2", clerk: "Clerk", a1: "Assistant 1", a2: "Assistant 2", cm: "Court manager" };
+const SLOT_LABEL = { r1: "Referee 1", r2: "Referee 2", clerk: "Clerk", clerk2: "Clerk 2", a1: "Assistant 1", a2: "Assistant 2", cm: "Court manager" };
 const s = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: "Helvetica", color: "#111" },
   event: { fontSize: 9, color: "#555" },

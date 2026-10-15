@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { addReferee, updateReferee, deleteReferee } from "../cloud.js";
-import { OFFICIAL_ROLES, ROLE_LABEL, RANKS, RANK_LABEL, rankOf, AVAIL_STATUS, availabilityOn, parseSlots, rolesOf } from "../officials/model.js";
+import { OFFICIAL_ROLES, ROLE_LABEL, RANKS, RANK_LABEL, rankOf, AVAIL_STATUS, availabilityOn, rolesOf } from "../officials/model.js";
 import { flagFor } from "../flags.js";
 
 const ROLE_TITLE = { referee: "Referee 1 / 2", clerk: "Clerk (scorer)", assistant: "Assistant 1 / 2 (line judge)", courtManager: "Court manager (may cover several courts at once)" };
@@ -15,7 +15,6 @@ const low = (v) => String(v ?? "").trim().toLowerCase();
 // See docs/referee-assignment-spec.md §2.1.
 export default function OfficialsCard({ refs, days, dayLabel, teamNations, archived }) {
   const [local, setLocal] = useState({});     // id -> patch (optimistic overlay)
-  const [slotText, setSlotText] = useState({}); // `${id}|${date}` -> raw text while typing
   const [fam, setFam] = useState("");
   const [giv, setGiv] = useState("");
   const [flt, setFlt] = useState(NO_FILTER);
@@ -42,18 +41,17 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
     save(r, { roles: next.length ? next : "" }, 0); // none ticked = any slot
   };
   // Availability map without "available, any time" entries (= the default).
+  // A day's entry: status plus an optional window (from / to). "Available,
+  // all day" is the default and isn't stored. (Older start-time lists are dropped
+  // once the day is edited.)
   const setAvail = (r, date, upd) => {
     const map = { ...(cur(r).availability || {}) };
-    const a = { ...availabilityOn(cur(r), date), ...upd };
-    if (a.status === "available" && !a.slots.length) delete map[date];
-    else map[date] = a.slots.length ? a : { status: a.status };
+    const { status, from, to } = { ...availabilityOn(cur(r), date), ...upd };
+    if (from && to && from >= to) return; // impossible window — ignore
+    const entry = { status, ...(from ? { from } : {}), ...(to ? { to } : {}) };
+    if (status === "available" && !from && !to) delete map[date];
+    else map[date] = entry;
     save(r, { availability: map }, 0);
-  };
-  const commitSlots = (r, date) => {
-    const k = `${r.id}|${date}`;
-    if (slotText[k] === undefined) return;
-    setAvail(r, date, { slots: parseSlots(slotText[k]) });
-    setSlotText((p) => { const n = { ...p }; delete n[k]; return n; });
   };
 
   // Assistant partner: picked as a person, stored as a shared assistantPair label on both
@@ -164,8 +162,8 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                     <button key={x} className={`of-role ${roles.includes(x) ? "on" : ""}`} disabled={archived} title={ROLE_TITLE[x]} onClick={() => toggleRole(r0, x)}>{ROLE_LABEL[x]}</button>
                   ))}</span></td>
                   <td>
-                    <select className="of-input of-sm" value={rankOf(r)} disabled={archived || !roles.includes("referee")} onChange={(e) => save(r0, { rank: e.target.value === "normal" ? "" : e.target.value }, 0)}
-                      aria-label="Rank" title={roles.includes("referee") ? undefined : "Only for referees"}>
+                    <select className="of-input of-sm" value={rankOf(r)} disabled={archived || !(roles.includes("referee") || roles.includes("assistant"))} onChange={(e) => save(r0, { rank: e.target.value === "normal" ? "" : e.target.value }, 0)}
+                      aria-label="Rank" title={roles.includes("referee") || roles.includes("assistant") ? undefined : "Only for referees and assistants"}>
                       {RANKS.map((x) => <option key={x} value={x}>{RANK_LABEL[x]}</option>)}
                     </select>
                   </td>
@@ -189,17 +187,17 @@ export default function OfficialsCard({ refs, days, dayLabel, teamNations, archi
                   <td><input className="of-input of-xs" type="number" min="1" value={r.maxPerDay ?? ""} disabled={archived} onChange={(e) => save(r0, { maxPerDay: e.target.value === "" ? "" : Math.max(1, parseInt(e.target.value, 10) || 1) })} placeholder="—" aria-label="Max games per day" /></td>
                   {days.map((d) => {
                     const a = availabilityOn(r, d);
-                    const k = `${r.id}|${d}`;
                     return (
                       <td key={d} className={`of-day of-${a.status}`}>
                         <select className="of-input of-sm" value={a.status} disabled={archived} onChange={(e) => setAvail(r0, d, { status: e.target.value })} aria-label={`Availability ${dayLabel(d)}`}>
                           {AVAIL_STATUS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                         </select>
                         {a.status !== "unavailable" && (
-                          <input className="of-input of-sm of-slots" value={slotText[k] ?? a.slots.join(", ")} disabled={archived}
-                            onChange={(e) => setSlotText((p) => ({ ...p, [k]: e.target.value }))} onBlur={() => commitSlots(r0, d)}
-                            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                            placeholder="all times" title="Only these start times, e.g. 10:30, 11:45 — empty = all day" aria-label={`Start times ${dayLabel(d)}`} />
+                          <span className="of-window" title="Only between these times — the whole game has to fit. Empty = all day.">
+                            <input type="time" className="of-input of-time" value={a.from} disabled={archived} onChange={(e) => setAvail(r0, d, { from: e.target.value })} aria-label={`Available from ${dayLabel(d)}`} />
+                            <span className="muted-sm">–</span>
+                            <input type="time" className="of-input of-time" value={a.to} disabled={archived} onChange={(e) => setAvail(r0, d, { to: e.target.value })} aria-label={`Available until ${dayLabel(d)}`} />
+                          </span>
                         )}
                       </td>
                     );

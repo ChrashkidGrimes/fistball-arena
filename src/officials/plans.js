@@ -12,7 +12,7 @@ import { resolveKit, teamKitsFor } from "../kits.js";
 import { isPlaceholder } from "../schedule/advance.js";
 import { parseSlots } from "./model.js";
 
-export const PLAN_SLOTS = ["r1", "r2", "clerk", "a1", "a2", "cm"];
+export const PLAN_SLOTS = ["r1", "r2", "clerk", "clerk2", "a1", "a2", "cm"];
 const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); return (y || 0) * 10000 + (m || 0) * 100 + (d || 0); };
 export const timeKey = (t) => parseSlots(t)[0] || String(t ?? "").trim();
 export const byTime = (a, b) => parseDate(a.date) - parseDate(b.date) || timeKey(a.time).localeCompare(timeKey(b.time))

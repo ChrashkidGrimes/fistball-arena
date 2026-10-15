@@ -1053,3 +1053,8 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
   .plan-card:last-of-type { break-after: auto; }
   .print-only { display: block; }
 }
+
+.as-settings { display: grid; gap: 8px; padding: 6px 0; }
+.as-court { margin-right: 10px; white-space: nowrap; }
+.of-window { display: flex; align-items: center; gap: 3px; margin-top: 4px; }
+.of-input.of-time { width: 84px; padding: 2px 4px; }
