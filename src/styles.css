@@ -960,3 +960,15 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .slot-phases { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .slot-phases .filter-pill { padding: 4px 10px; font-size: 12px; }
 .sched-miss { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- Starting 5 (súmula) ---------- */
+.sf-court { margin-top: 10px; background: linear-gradient(#2f8f4e, #277a42); border: 3px solid #fff; border-radius: 10px; padding: 0 12px 14px; color: #fff; }
+.sf-net { text-align: center; font-weight: 800; letter-spacing: .3em; font-size: 11px; border-bottom: 4px solid #fff; padding: 6px 0 4px; margin: 0 -12px 12px; }
+.sf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.sf-row.center { grid-template-columns: minmax(0, 1fr); max-width: 50%; margin-left: auto; margin-right: auto; }
+.sf-slot { background: rgba(255,255,255,.14); border: 1px dashed rgba(255,255,255,.6); border-radius: 9px; padding: 8px; min-width: 0; }
+.sf-slot.on { background: rgba(255,255,255,.95); color: var(--text); border-style: solid; }
+.sf-pos { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; opacity: .85; margin-bottom: 4px; }
+.sf-slot select { width: 100%; padding: 6px; border-radius: 7px; border: 1px solid var(--line); font-size: 13px; background: #fff; color: var(--text); }
+.sf-player { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn.to-used { background: #fdecec; color: #a42020; border-color: #f2b8b8; }

@@ -1018,6 +1018,16 @@ export async function saveReport(gameId, me, patch) {
   });
   await publishResult(gameId);
 }
+// Starting five + field position of one team (side "teamA"/"teamB"):
+// { [position]: { nr, name, first } }. Saved on its own — by any official or
+// admin, even without the scoring lock (the referee fills it with the coach on
+// another device) — and mirrored to the public result so media can view it.
+export async function saveStartingFive(gameId, side, five) {
+  await updateDoc(edoc("reports", gameId), { [`startingFive.${side}`]: five });
+  try { await updateDoc(edoc("results", gameId), { [`startingFive.${side}`]: five }); }
+  catch (_) { await setDoc(edoc("results", gameId), { startingFive: { [side]: five } }, { merge: true }); }
+}
+
 export async function submitReport(gameId, me) {
   await updateDoc(edoc("reports", gameId), {
     status: "submitted",

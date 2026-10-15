@@ -4,16 +4,18 @@ import { pdf } from "@react-pdf/renderer";
 import {
   ensureReport, subscribeReport, acquireLock, releaseLock, heartbeat,
   adminUnlock, reopenReport, saveReport, submitReport, fetchTeamRosters, buildReportSeed,
-  subscribeReferees, resetReport,
+  subscribeReferees, resetReport, saveStartingFive,
 } from "../cloud.js";
 import SumulaPDF from "../pdf/SumulaPDF.jsx";
 import { flagFor } from "../flags.js";
 import { useEvent } from "../eventContext.js";
-import { overlayUrl } from "../broadcast.js";
+import { overlayUrl, gamePageUrl } from "../broadcast.js";
 
 const SECTIONS = [
   ["info", "Info"],
   ["lineup", "Line-ups"],
+  ["sfA", "Starting 5 · A"],
+  ["sfB", "Starting 5 · B"],
   ["score", "Score"],
   ["refs", "Referees"],
   ["finish", "Finish"],
@@ -29,6 +31,9 @@ export default function Sumula({ me }) {
   const [section, setSection] = useState("info");
   const [team, setTeam] = useState("teamA");
   const [saving, setSaving] = useState(false);
+  // Starting five lives outside the draft: it's edited without the scoring lock
+  // and must show live on every device (incl. the scorer holding the lock).
+  const [startingFive, setStartingFive] = useState({});
   const holdRef = useRef(false);
   const draftRef = useRef(null);
   const saveTimer = useRef(null);
@@ -68,6 +73,7 @@ export default function Sumula({ me }) {
           return;
         }
         setLockedBy(data.lockedBy || null);
+        setStartingFive(data.startingFive || {});
         const done = data.status === "submitted";
         setSubmitted(done);
         const holding = !!data.lockedBy && data.lockedBy.uid === me.uid;
@@ -164,6 +170,19 @@ export default function Sumula({ me }) {
     catch (e) { alert("Could not reopen: " + (e?.message || e)); }
   }
 
+  // Referee or event head (official/admin) edits the starting five; after
+  // submission only an admin. Everyone else (e.g. media as viewers) reads it.
+  const canEditFive = canScore && !archived && (!submitted || isAdmin);
+  const setFive = (side, five) => {
+    setStartingFive((cur) => ({ ...cur, [side]: five }));
+    saveStartingFive(id, side, five).catch((e) => alert("Couldn't save the starting five: " + (e?.code || e?.message || e)));
+  };
+  async function copyStartLink() {
+    const url = gamePageUrl(eventId, id, "#starting5");
+    try { await navigator.clipboard.writeText(url); alert("View-only link for media copied:\n" + url); }
+    catch (_) { window.prompt("View-only link for media (copy it):", url); }
+  }
+
   async function copyOverlay() {
     const url = overlayUrl(eventId, { game: id });
     try { await navigator.clipboard.writeText(url); alert("Broadcast link copied:\n" + url); }
@@ -216,7 +235,7 @@ export default function Sumula({ me }) {
       <nav className="steps">
         {SECTIONS.map(([k, label]) => (
           <button key={k} className={`step ${section === k ? "active" : ""}`} onClick={() => setSection(k)}>
-            {label}
+            {k === "sfA" ? `Starting 5 · ${short(draft.teamA.name)}` : k === "sfB" ? `Starting 5 · ${short(draft.teamB.name)}` : label}
           </button>
         ))}
       </nav>
@@ -227,6 +246,11 @@ export default function Sumula({ me }) {
           <LineupSection d={draft} team={team} setTeam={setTeam} update={update} loadRoster={loadRoster} readOnly={readOnly}
             onFixNames={isAdmin && !archived ? () => nav(`/e/${eventId}/roster`) : null} />
         )}
+        {(section === "sfA" || section === "sfB") && (() => {
+          const side = section === "sfA" ? "teamA" : "teamB";
+          return <StartingFiveSection team={draft[side]} five={startingFive[side] || {}} canEdit={canEditFive}
+            onChange={(f) => setFive(side, f)} onCopyLink={copyStartLink} />;
+        })()}
         {section === "score" && <ScoreSection d={draft} scoring={scoring} update={update} readOnly={readOnly} />}
         {section === "refs" && <RefsSection d={draft} update={update} refNames={refNames} />}
         {section === "finish" && <FinishSection d={draft} scoring={scoring} update={update} onPdf={downloadPDF} />}
@@ -284,6 +308,69 @@ function PlayerAvatar({ src, name }) {
   const [err, setErr] = useState(false);
   if (src && !err) return <img className="avatar" src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setErr(true)} />;
   return <span className="avatar avatar-ph">{(name || "?").trim()[0]}</span>;
+}
+
+// Field positions, as seen from the team's half with the net at the top.
+const FIVE_POSITIONS = [
+  ["AL", "Attacker left"], ["AR", "Attacker right"],
+  ["C", "Centre"],
+  ["DL", "Defender left"], ["DR", "Defender right"],
+];
+
+function StartingFiveSection({ team, five, canEdit, onChange, onCopyLink }) {
+  const players = team.players || [];
+  const keyOf = (p) => `${p.nr}|${p.name}|${p.first}`;
+  const takenElsewhere = (pos) => new Set(Object.entries(five).filter(([k, v]) => k !== pos && v).map(([, v]) => keyOf(v)));
+  const pick = (pos, value) => {
+    const next = { ...five };
+    const p = players.find((x) => keyOf(x) === value);
+    if (p) next[pos] = { nr: p.nr ?? "", name: p.name || "", first: p.first || "" };
+    else delete next[pos];
+    onChange(next);
+  };
+  const filled = FIVE_POSITIONS.filter(([k]) => five[k]).length;
+  // Plain function (not a component) so the selects keep focus between renders.
+  const slot = (pos, label) => {
+    const v = five[pos];
+    const taken = takenElsewhere(pos);
+    return (
+      <div className={`sf-slot ${v ? "on" : ""}`} key={pos}>
+        <div className="sf-pos">{label}</div>
+        {canEdit ? (
+          <select value={v ? keyOf(v) : ""} onChange={(e) => pick(pos, e.target.value)} aria-label={label}>
+            <option value="">—</option>
+            {players.map((p) => (
+              <option key={keyOf(p)} value={keyOf(p)} disabled={taken.has(keyOf(p))}>#{p.nr} {p.name} {p.first}</option>
+            ))}
+          </select>
+        ) : v ? (
+          <div className="sf-player"><b>#{v.nr}</b> {v.name} {v.first}</div>
+        ) : <div className="sf-player muted-sm">—</div>}
+      </div>
+    );
+  };
+  return (
+    <div className="card">
+      <div className="row-between">
+        <h2 style={{ margin: 0 }}>Starting 5 — {short(team.name)}</h2>
+        <button className="btn sm" onClick={onCopyLink} title="View-only page for media & communication (no login)">🔗 Link for media</button>
+      </div>
+      <p className="muted-sm">
+        {canEdit
+          ? "Fill in with the coach before the game: who starts and in which position. Saved instantly and shown read-only to media on Fistball Live."
+          : "Read only — the referee or the event head fills this in."}
+        {" "}{filled}/5 positions set.
+      </p>
+      {canEdit && !players.length && <div className="warn-box">No line-up loaded for this team yet — load the roster in Line-ups first.</div>}
+      <div className="sf-court">
+        <div className="sf-net">NET</div>
+        <div className="sf-row">{slot("AL", "Attacker left")}{slot("AR", "Attacker right")}</div>
+        <div className="sf-row center">{slot("C", "Centre")}</div>
+        <div className="sf-row">{slot("DL", "Defender left")}{slot("DR", "Defender right")}</div>
+      </div>
+      {canEdit && filled > 0 && <button className="btn sm" style={{ marginTop: 10 }} onClick={() => onChange({})}>Clear all</button>}
+    </div>
+  );
 }
 
 function LineupSection({ d, team, setTeam, update, loadRoster, readOnly, onFixNames }) {
@@ -396,10 +483,21 @@ function ScoreSection({ d, scoring, update, readOnly }) {
   const setRally = (i, w) => { update((n) => { n.sets[cur].rallies[i] = w; }); setSelCol(null); };
   const removeRally = (i) => { update((n) => { n.sets[cur].rallies.splice(i, 1); }); setSelCol(null); };
   const setBall = (which, val) => update((n) => (n.ballChoice[which] = val));
-  const addTimeout = (side) => update((n) => {
-    if (!n.timeouts) n.timeouts = { teamA: [], teamB: [] };
-    (n.timeouts[side] = n.timeouts[side] || []).push({ set: cur, a, b });
-  });
+  // One time-out per team per set: a second request is refused, so an
+  // unaware table official can't grant it — call the referee instead.
+  const usedTimeout = (side) => (d.timeouts?.[side] || []).some((t) => (t.set ?? 0) === cur);
+  const addTimeout = (side) => {
+    if (usedTimeout(side)) {
+      alert(`No time-out left: ${short(d[side].name)} already took its time-out in set ${cur + 1}.`);
+      return;
+    }
+    update((n) => {
+      if (!n.timeouts) n.timeouts = { teamA: [], teamB: [] };
+      const list = (n.timeouts[side] = n.timeouts[side] || []);
+      if (list.some((t) => (t.set ?? 0) === cur)) return;
+      list.push({ set: cur, a, b });
+    });
+  };
   const removeTimeout = (side, i) => update((n) => n.timeouts[side].splice(i, 1));
 
   // Build the two paper rows: the scorer's running number, "/" on the other side.
@@ -489,13 +587,15 @@ function ScoreSection({ d, scoring, update, readOnly }) {
         </p>
       )}
 
-      <div className="subhead">Time-outs <span className="muted-sm" style={{ fontWeight: 400 }}>(records the set &amp; score at the moment)</span></div>
+      <div className="subhead">Time-outs <span className="muted-sm" style={{ fontWeight: 400 }}>(one per team per set · records the set &amp; score at the moment)</span></div>
       <div className="to-panel">
         {["teamA", "teamB"].map((side) => (
           <div className="to-team" key={side}>
             <div className="to-head">
               <span className="to-name">{short(d[side].name)}</span>
-              {!readOnly && <button className="btn sm" onClick={() => addTimeout(side)}>+ Time-out</button>}
+              {!readOnly && (usedTimeout(side)
+                ? <button className="btn sm to-used" onClick={() => addTimeout(side)} title="One time-out per team per set">No time-out left (set {cur + 1})</button>
+                : <button className="btn sm" onClick={() => addTimeout(side)}>+ Time-out</button>)}
             </div>
             <div className="to-chips">
               {(d.timeouts?.[side] || []).map((t, i) => (

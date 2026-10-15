@@ -17,3 +17,10 @@ export function resultsJsonUrl(eventId, gameId) {
   const pid = import.meta.env.VITE_FIREBASE_PROJECT_ID || "fistball-arena";
   return `https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/events/${eventId}/results${gameId ? `/${gameId}` : ""}`;
 }
+
+// Public, view-only page of one game on Fistball Live — score, point by point
+// and both teams' starting five (for media & communication teams).
+export function gamePageUrl(eventId, gameId, hash = "") {
+  const q = new URLSearchParams({ event: eventId, game: gameId });
+  return `${LIVE_URL}game.html?${q}${hash}`;
+}
