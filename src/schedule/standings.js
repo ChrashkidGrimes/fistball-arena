@@ -58,3 +58,15 @@ export function groupComplete(results, teamCount) {
   const played = (results || []).filter(isPlayed).length;
   return teamCount >= 2 && played >= expected;
 }
+
+// Group-stage record per team across all groups (points, set and point
+// difference) — used to rank teams from different groups against each other,
+// e.g. quarterfinal losers for the 5th/7th place games.
+export function compareRecords(results) {
+  const T = tableFrom(results || [], null);
+  return (x, y) => {
+    const a = T.get(x), b = T.get(y);
+    if (!a || !b) return (a ? -1 : 0) + (b ? 1 : 0);
+    return (b.pts - a.pts) || (setDiff(b) - setDiff(a)) || (ptDiff(b) - ptDiff(a)) || (b.ptsF - a.ptsF) || x.localeCompare(y);
+  };
+}

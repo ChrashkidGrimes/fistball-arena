@@ -24,6 +24,26 @@ function bestMatch(club, registered) {
   return bestScore >= 2 ? best : null; // only auto-accept strong matches
 }
 
+// Closest name by letters (for suggestions like "Punta Chica" → "Puntas Chica").
+function closestName(name, options) {
+  const a = strip(name);
+  if (!a || !options.length) return null;
+  const dist = (x, y) => {
+    const d = Array.from({ length: x.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= y.length; j++) d[0][j] = j;
+    for (let i = 1; i <= x.length; i++) for (let j = 1; j <= y.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+    return d[x.length][y.length];
+  };
+  let best = null, bestScore = Infinity;
+  for (const o of options) {
+    const b = strip(o);
+    const score = a === b ? 0 : b.includes(a) || a.includes(b) ? 0.3 : dist(a, b) / Math.max(a.length, b.length);
+    if (score < bestScore) { bestScore = score; best = o; }
+  }
+  return bestScore <= 0.4 ? best : null;
+}
+
 // Guess which event category a file belongs to, from its filename.
 function guessCategory(filename, categories) {
   const flags = (s) => ({
@@ -90,8 +110,11 @@ function TeamCombo({ value, options, onChange, placeholder }) {
 
 // Import players & staff from one Excel file PER CATEGORY. Load several files;
 // assign each to a category (from step 3). Rosters are stored as "<team> - <category>".
-export default function ExcelImport({ me, teamNames = [], categories = [] }) {
+// scheduleTeams: { [category]: [team names on that category's games] } — the
+// game reports find players by these exact names, so mismatches are flagged.
+export default function ExcelImport({ me, teamNames = [], categories = [], scheduleTeams = {} }) {
   const registered = [...teamNames].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  const scheduleFor = (cat) => (cat ? scheduleTeams[cat] || [] : [...new Set(Object.values(scheduleTeams).flat())]);
   const [files, setFiles] = useState([]); // [{ id, filename, category, teams, referees, count, teamCount, refereeCount, warnings, names }]
   const [status, setStatus] = useState("");
   const [history, setHistory] = useState([]);
@@ -118,13 +141,16 @@ export default function ExcelImport({ me, teamNames = [], categories = [] }) {
     try {
       const r = await parseExcelRoster(file);
       const names = {};
+      const cat = guessCategory(file.name, categories);
+      const sched = scheduleFor(cat);
       Object.entries(r.teams).forEach(([k, t]) => {
-        const hit = registered.length ? bestMatch(t.name, registered) : null;
+        // Prefer the spelling used on the games, then the registered teams.
+        const hit = (sched.length ? bestMatch(t.name, sched) : null) || (registered.length ? bestMatch(t.name, registered) : null);
         names[k] = hit || t.name;
       });
       const id = `f${seqRef.current++}`;
       setFiles((prev) => [...prev, {
-        id, filename: file.name, category: guessCategory(file.name, categories),
+        id, filename: file.name, category: cat,
         teams: r.teams, referees: r.referees, count: r.count, teamCount: r.teamCount,
         refereeCount: r.refereeCount, warnings: r.warnings, names,
       }]);
@@ -222,12 +248,15 @@ export default function ExcelImport({ me, teamNames = [], categories = [] }) {
               const cur = raw.trim();
               const isReg = registered.includes(cur);
               const isDup = dupKeys.has(finalKey(f, orig));
+              const sched = scheduleFor(f.category);
+              const inSchedule = !sched.length || sched.includes(cur);
+              const closest = !inSchedule ? closestName(cur, sched) : null;
               return (
                 <div className={`roster-row ${!isReg && registered.length ? "row-warn" : ""} ${isDup ? "row-dup" : ""}`} key={orig}>
                   <span className="muted-sm" style={{ flex: "0 0 150px", overflow: "hidden", textOverflow: "ellipsis" }} title={orig}>{t.name}</span>
                   <span className="muted-sm">→</span>
                   {registered.length ? (
-                    <TeamCombo value={raw} options={registered} placeholder="pick or type a team name"
+                    <TeamCombo value={raw} options={[...new Set([...registered, ...sched])].sort((a, b) => a.localeCompare(b))} placeholder="pick or type a team name"
                       onChange={(v) => setTeamName(f.id, orig, v)} />
                   ) : (
                     <input style={{ flex: 1 }} value={raw} placeholder="team name" onChange={(e) => setTeamName(f.id, orig, e.target.value)} />
@@ -238,6 +267,12 @@ export default function ExcelImport({ me, teamNames = [], categories = [] }) {
                     </span>
                   )}
                   <span className="tag" title={`${t.players.length} player${t.players.length === 1 ? "" : "s"} · ${t.staff.length} staff in the file`}>{t.players.length}P · {t.staff.length}S</span>
+                  {!inSchedule && (
+                    <span className="sched-miss">
+                      <span className="tag tag-warn" title="The game reports look players up by the team's exact name on the games — this one isn't on the schedule">not on the games</span>
+                      {closest && <button className="btn sm" onClick={() => setTeamName(f.id, orig, closest)} title="Use the name the games use">use “{closest}”</button>}
+                    </span>
+                  )}
                 </div>
               );
             })}

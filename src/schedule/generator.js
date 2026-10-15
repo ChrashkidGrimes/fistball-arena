@@ -3,7 +3,7 @@
 
 import { roundRobin } from "./roundRobin.js";
 import { buildBracket } from "./bracket.js";
-import { buildFormat, hasFormat } from "./format.js";
+import { buildFormat, hasFormat, buildGroupFormat } from "./format.js";
 import { allocate } from "./scheduler.js";
 import { team } from "../seed.js";
 
@@ -34,11 +34,18 @@ export function generateSchedule(config) {
     const catName = categoryLabel(cat);
     const catKey = catName.replace(/\s+/g, "_");
 
-    // Championship preset by team count (single group + rank-seeded knockout).
+    // Several groups: round-robin per group + cross-over knockout. One group:
+    // championship preset by team count (rank-seeded knockout).
     const allTeams = (cat.groups || []).flatMap((g) => g.teams || []);
-    if (hasFormat(allTeams.length)) {
-      const built = buildFormat(allTeams, { category: catName, bestOf: cat.bestOf || 3, bestOfKo: cat.bestOfKo, override: cat.override, double: !!cat.double, knockout: cat.knockout !== false });
-      const nsSrc = (s) => (s && s.dep ? { ...s, dep: `${catKey}:${s.dep}` } : s);
+    const multi = (cat.groups || []).filter((g) => (g.teams || []).length).length > 1;
+    if (multi || hasFormat(allTeams.length)) {
+      const opts = { category: catName, bestOf: cat.bestOf || 3, bestOfKo: cat.bestOfKo, double: !!cat.double, knockout: cat.knockout !== false };
+      const built = multi
+        ? buildGroupFormat(cat.groups.filter((g) => (g.teams || []).length), { ...opts, qualifiers: cat.qualifiers, placements: cat.placements !== false, override: cat.override })
+        : buildFormat(allTeams, { ...opts, override: cat.override });
+      warnings.push(...(built.warnings || []));
+      const nsSrc = (s) => (s && s.dep ? { ...s, dep: `${catKey}:${s.dep}` }
+        : s && s.deps ? { ...s, deps: s.deps.map((d) => `${catKey}:${d}`) } : s);
       for (const f of built.fixtures) {
         fixtures.push({
           ...f, id: `${catKey}:${f.id}`, deps: (f.deps || []).map((d) => `${catKey}:${d}`), seq: seq++,
@@ -87,7 +94,7 @@ export function generateSchedule(config) {
 
   if (!fixtures.length) return { games: [], warnings, unplaced: [], fixtureCount: 0 };
 
-  const { placed, unplaced, warnings: aw } = allocate(fixtures, config.slots);
+  const { placed, unplaced, warnings: aw } = allocate(fixtures, config.slots, config.occupied);
   warnings.push(...aw);
 
   let nr = Number(config.startNr) || 1;
@@ -95,7 +102,11 @@ export function generateSchedule(config) {
   for (const p of placed) idToNr.set(p.fixture.id, nr++);
   const mapSrc = (s, category) => {
     if (!s) return undefined;
-    if (s.type === "seed") return { type: "seed", rank: s.rank, category };
+    if (s.type === "seed") return s.group ? { type: "seed", group: s.group, rank: s.rank, category } : { type: "seed", rank: s.rank, category };
+    if (s.type === "rankedLoser") {
+      const games = (s.deps || []).map((d) => idToNr.get(d)).filter(Boolean).map((n) => `g${n}`);
+      return games.length === (s.deps || []).length ? { type: "rankedLoser", games, rank: s.rank } : undefined;
+    }
     const n = idToNr.get(s.dep);
     return n ? { type: s.type, game: `g${n}` } : undefined;
   };

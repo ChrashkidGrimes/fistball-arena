@@ -6,6 +6,7 @@ import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { db, auth, googleProvider } from "./firebase.js";
 import { team } from "./seed.js";
 import { resolveAdvancement } from "./schedule/advance.js";
+import { rankedLoserLabel } from "./schedule/format.js";
 
 /* ----------------- identity (Google login) ----------------- */
 // Bootstrap org-admins — can create events and manage members of any event.
@@ -302,7 +303,7 @@ export async function setTeamLogo(teamName, dataUrl) {
 }
 
 /* ----------------- team kits (uniforms) ----------------- */
-// One public doc per event: { eventId, kits: { [teamName]: [{shirt, shorts}, {shirt, shorts}] } }
+// One public doc per event: { eventId, kits: { [kitKey(team, category)]: [{shirt, shorts}, {shirt, shorts}] } }
 // — up to two uniforms per team. Games pick one by number (see saveGameKit);
 // public so Fistball Live can show which uniform each team wears.
 const teamKitsRef = (eid) => doc(db, "public", `teamkits_${eid}`);
@@ -311,9 +312,9 @@ export function subscribeTeamKits(cb) {
     (d) => cb(d.exists() ? d.data().kits || {} : {}),
     (err) => { console.warn("team kits unavailable:", err?.code || err); cb({}); });
 }
-export async function setTeamKits(teamName, kits) {
+export async function setTeamKits(key, kits) {
   const eid = reqEid();
-  await setDoc(teamKitsRef(eid), { eventId: eid, kits: { [teamName]: kits } }, { merge: true });
+  await setDoc(teamKitsRef(eid), { eventId: eid, kits: { [key]: kits } }, { merge: true });
 }
 
 /* ----------------- logo library + event branding ----------------- */
@@ -351,29 +352,55 @@ export function subscribeAllBranding(cb) {
   }, (err) => { console.warn("branding list unavailable:", err?.code || err); cb({}); });
 }
 
-/* ----------------- Fistball Live pointer -----------------
- * A single PUBLIC doc telling the spectator app which event to show. Read
- * anonymously by Fistball Live; written by an admin of that event (or org-admin). */
+/* ----------------- Fistball Live: events on air -----------------
+ * Several events can be on Fistball Live at once (e.g. Clubs WC and the
+ * Pan-American Games a few days apart): each one's PUBLIC info doc
+ * (public/event_{id}) carries onLive:true and spectators pick an event.
+ * public/live still points at the latest one published, for Live versions
+ * that only knew a single event (and older events published that way).
+ * cb gets { eventId (latest), ids: Set, events: [{eventId, name, …}] }. */
 export function subscribeLivePointer(cb) {
-  return onSnapshot(doc(db, "public", "live"),
-    (d) => cb(d.exists() ? d.data() : null),
-    (err) => { console.warn("live pointer unavailable:", err?.code || err); cb(null); });
+  let pointer = null, onLive = [], firstPointer = false, firstList = false;
+  const emit = () => {
+    if (!firstPointer || !firstList) return;
+    const events = [...onLive];
+    if (pointer?.eventId && !events.some((e) => e.eventId === pointer.eventId)) events.push(pointer);
+    cb({ eventId: pointer?.eventId || events[0]?.eventId || null, name: pointer?.name || events[0]?.name || "", ids: new Set(events.map((e) => e.eventId)), events });
+  };
+  const u1 = onSnapshot(doc(db, "public", "live"),
+    (d) => { pointer = d.exists() ? d.data() : null; firstPointer = true; emit(); },
+    (err) => { console.warn("live pointer unavailable:", err?.code || err); pointer = null; firstPointer = true; emit(); });
+  const u2 = onSnapshot(query(collection(db, "public"), where("onLive", "==", true)),
+    (snap) => { onLive = snap.docs.map((d) => d.data()).filter((v) => v.eventId); firstList = true; emit(); },
+    (err) => { console.warn("live events unavailable:", err?.code || err); onLive = []; firstList = true; emit(); });
+  return () => { u1(); u2(); };
 }
 export async function setLiveEvent(event) {
   const eid = event?.id || reqEid();
+  // An event published before multi-event Live is only on the old pointer:
+  // flag it on air too, so moving the pointer doesn't take it off Live.
+  try {
+    const p = await getDoc(doc(db, "public", "live"));
+    const prev = p.exists() ? p.data().eventId : null;
+    if (prev && prev !== eid) await writeEventPublic(prev, { onLive: true });
+  } catch (e) { console.warn("couldn't keep the previous live event on air:", e?.code || e); }
   await setDoc(doc(db, "public", "live"), {
     eventId: eid, name: event?.name || "",
     startsAt: event?.startDate || "", endsAt: event?.endDate || "",
     updatedAt: serverTimestamp(),
   });
-  // Ensure the public info doc exists so the Live has place/dates/countdown.
+  // The public info doc (place/dates/countdown) also flags the event as on air.
   await writeEventPublic(eid, {
     name: event?.name || "", place: event?.place || "", address: event?.address || "", dates: event?.dates || "",
-    startsAt: event?.startDate || "", endsAt: event?.endDate || "",
+    startsAt: event?.startDate || "", endsAt: event?.endDate || "", onLive: true,
   });
 }
-export async function clearLiveEvent() {
-  await deleteDoc(doc(db, "public", "live"));
+// Take one event off Fistball Live (others stay on).
+export async function clearLiveEvent(eventId) {
+  const eid = eventId || reqEid();
+  await writeEventPublic(eid, { onLive: false });
+  const p = await getDoc(doc(db, "public", "live"));
+  if (p.exists() && p.data().eventId === eid) await deleteDoc(doc(db, "public", "live"));
 }
 
 // Reset all match reports (súmulas) — deletes every report and sets each public
@@ -386,8 +413,9 @@ function slotPlaceholder(src, gamesById) {
   if (src.type === "seed") {
     const n = Number(src.rank) || 0;
     const suf = n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th";
-    return `${n}${suf}`;
+    return src.group ? `${n}${suf} Group ${src.group}` : `${n}${suf}`;
   }
+  if (src.type === "rankedLoser") return rankedLoserLabel(src.rank);
   const round = gamesById[src.game || src.dep]?.round;
   if (!round) return null;
   if (src.type === "winner") return `Winner ${round}`;
@@ -457,6 +485,7 @@ export async function resetReport(gameId) {
   const isQR = game.round === "Qualification round";
   const dependsOnThis = (src) => !!src && (
     ((src.type === "winner" || src.type === "loser") && (src.game || src.dep) === gameId)
+    || (src.type === "rankedLoser" && (src.games || []).includes(gameId))
     || (src.type === "seed" && isQR));
   const rsnap = await getDocs(ecol("results"));
   const resById = {};
@@ -716,6 +745,41 @@ async function getRoster(teamName, category) {
   }
   return null;
 }
+// Rename a team in this event's published games — game docs, public results
+// and game reports — e.g. when the schedule spelled it differently from the
+// players & staff registry ("Puntas Chica" vs "Punta Chica"). A report whose
+// line-up is still empty gets the registered players & staff. category limits
+// it to one category ("" = all). Returns how many games changed.
+export async function renameTeamInGames(fromName, toName, category = "") {
+  if (!fromName || !toName || fromName === toName) return 0;
+  const gsnap = await getDocs(ecol("games"));
+  let changed = 0;
+  for (const d of gsnap.docs) {
+    const g = d.data();
+    if (category && g.category !== category) continue;
+    const sides = ["teamA", "teamB"].filter((s) => g[s]?.name === fromName);
+    if (!sides.length) continue;
+    const gameUpd = {}, resUpd = {}, repUpd = {};
+    const rep = await getDoc(edoc("reports", d.id));
+    const roster = await getRoster(toName, g.category);
+    for (const s of sides) {
+      gameUpd[s] = { ...g[s], name: toName };
+      resUpd[s] = toName;
+      if (rep.exists()) {
+        const cur = rep.data()[s] || {};
+        repUpd[s] = (cur.players || []).length || !roster
+          ? { ...cur, name: toName }
+          : cloneTeam({ name: toName, players: roster.players || [], staff: roster.staff || [] });
+      }
+    }
+    await updateDoc(d.ref, gameUpd);
+    await setDoc(edoc("results", d.id), resUpd, { merge: true });
+    if (rep.exists()) await updateDoc(edoc("reports", d.id), repUpd);
+    changed++;
+  }
+  return changed;
+}
+
 export async function fetchTeamRosters(names, category) {
   const out = {};
   for (const name of [...new Set(names)]) {
@@ -984,7 +1048,7 @@ async function advanceCategory(category, allGames, allRes) {
     if (g.teamB?.name) qrTeams.add(g.teamB.name);
   });
   const shaped = games.map((g) => ({
-    id: g.id, category: g.category, phase: g.round === "Qualification round" ? "group" : "ko",
+    id: g.id, category: g.category, phase: g.round === "Qualification round" ? "group" : "ko", group: g.group || "",
     round: g.round, teamA: g.teamA?.name, teamB: g.teamB?.name, srcA: g.srcA, srcB: g.srcB,
   }));
   const patches = resolveAdvancement(shaped, resultsById, qrTeams.size);

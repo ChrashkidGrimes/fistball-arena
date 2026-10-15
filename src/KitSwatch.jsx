@@ -1,11 +1,9 @@
-// Shirt over shorts, as a tiny two-tone swatch.
+// The jersey as a small swatch: one stripe per colour.
 export function KitSwatch({ kit, size = 14 }) {
-  if (!kit) return null;
-  const title = [kit.n && `Uniform ${kit.n}`, kit.shirt && "shirt", kit.shorts && "shorts"].filter(Boolean).join(" · ");
+  if (!kit?.colors?.length) return null;
   return (
-    <span className="kit-sw" title={title} style={{ width: size, height: size * 1.25 }}>
-      <span style={{ background: kit.shirt || "transparent", flex: 3 }} />
-      <span style={{ background: kit.shorts || kit.shirt || "transparent", flex: 2 }} />
+    <span className="kit-sw" title={kit.n ? `Uniform ${kit.n}` : "Jersey"} style={{ width: size, height: size * 1.15 }}>
+      {kit.colors.map((c, i) => <span key={i} style={{ background: c }} />)}
     </span>
   );
 }

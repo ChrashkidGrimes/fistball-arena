@@ -35,12 +35,12 @@ export default function GlobalShell({ me, onSignOut }) {
             <div className="sb-brandsub">Game reports</div>
           </div>
         </div>
-        {live?.eventId && (
-          <div className="sb-state global">
-            <span className="dot-live" /> {live.name || "Event"} live
-            <a className="live-link" href={`${LIVE_URL}?event=${live.eventId}`} target="_blank" rel="noreferrer">View ↗</a>
+        {(live?.events || []).map((e) => (
+          <div className="sb-state global" key={e.eventId}>
+            <span className="dot-live" /> {e.name || "Event"} live
+            <a className="live-link" href={`${LIVE_URL}?event=${e.eventId}`} target="_blank" rel="noreferrer">View ↗</a>
           </div>
-        )}
+        ))}
         <div className="sb-label">Global</div>
         <nav className="sb-nav">
           {items.map((it) => (

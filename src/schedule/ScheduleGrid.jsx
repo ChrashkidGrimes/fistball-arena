@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { subscribeGames, updateGameSlots, saveScheduleBlocks } from "../cloud.js";
-import { normalizeSlots } from "./scheduler.js";
+import { normalizeSlots, dayGameMinutes } from "./scheduler.js";
 import { useEvent } from "../eventContext.js";
 
 const PALETTE = ["#6c5ce7", "#e84393", "#00b894", "#0984e3", "#e17055", "#00cec9", "#d63031", "#a29bfe", "#e1b12c", "#636e72"];
@@ -49,9 +49,10 @@ export default function ScheduleGrid({ games: controlledGames, onChange }) {
 
   const timesFor = (date) => {
     const day = slots.days.find((d) => d.date === date);
-    const step = slots.gameMinutes + slots.breakMinutes;
+    const dur = dayGameMinutes(day, slots.gameMinutes);
+    const step = dur + slots.breakMinutes;
     const set = new Set();
-    if (day && step > 0) for (let t = toMin(day.start); t + slots.gameMinutes <= toMin(day.end) + 1; t += step) set.add(toHHMM(t));
+    if (day && step > 0) for (let t = toMin(day.start); t + dur <= toMin(day.end) + 1; t += step) set.add(toHHMM(t));
     (games || []).map(eff).filter((g) => g.date === date && g.time).forEach((g) => set.add(g.time));
     return [...set].sort((a, b) => toMin(a) - toMin(b));
   };
