@@ -1,3 +1,5 @@
+import { USE_EMULATOR, EMULATOR_HOST, FIRESTORE_EMULATOR_PORT } from "./firebase.js";
+
 // Links to the broadcast scoreboard overlay hosted with Fistball Live
 // (overlay.html). Public, no login — paste into OBS/vMix as a browser source.
 export const LIVE_URL = "https://c-englert.github.io/fistball-live/";
@@ -15,7 +17,8 @@ export function overlayUrl(eventId, { game, court } = {}) {
 // graphics tools). Pass a gameId for a single game.
 export function resultsJsonUrl(eventId, gameId) {
   const pid = import.meta.env.VITE_FIREBASE_PROJECT_ID || "fistball-arena";
-  return `https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents/events/${eventId}/results${gameId ? `/${gameId}` : ""}`;
+  const base = USE_EMULATOR ? `http://${EMULATOR_HOST}:${FIRESTORE_EMULATOR_PORT}` : "https://firestore.googleapis.com";
+  return `${base}/v1/projects/${pid}/databases/(default)/documents/events/${eventId}/results${gameId ? `/${gameId}` : ""}`;
 }
 
 // Public, view-only page of one game on Fistball Live — score, point by point

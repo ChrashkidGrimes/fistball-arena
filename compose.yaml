@@ -1,0 +1,105 @@
+# Local test environment: Firebase emulators + seeded demo data + Vite dev server.
+# Works with `podman compose` and `docker compose`. See docs/local-testing.md.
+#
+#   podman compose up -d --build     # start (first run builds the images)
+#   open http://localhost:5173       # the app, against the emulators
+#   open http://localhost:4001       # Emulator UI (data, users, rules log)
+#   podman compose down              # stop; emulator data is saved to a volume
+#
+# Ports are published on 127.0.0.1 only: the emulators have no authentication
+# (anyone who can reach them can read, change or wipe all data). To test from
+# a tablet on a trusted LAN, start with BIND_ADDR=0.0.0.0.
+name: fistball-arena
+
+services:
+  emulators:
+    build:
+      context: .
+      dockerfile: docker/emulators.Dockerfile
+    volumes:
+      - ./firestore.rules:/work/firestore.rules:ro
+      - ./firestore.indexes.json:/work/firestore.indexes.json:ro
+      - emulator-data:/data
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:4001:4001"   # Emulator UI
+      - "${BIND_ADDR:-127.0.0.1}:4400:4400"   # hub (used by the UI)
+      - "${BIND_ADDR:-127.0.0.1}:4500:4500"   # logging (used by the UI)
+      - "${BIND_ADDR:-127.0.0.1}:8080:8080"   # Firestore
+      - "${BIND_ADDR:-127.0.0.1}:9150:9150"   # Firestore websocket (used by the UI)
+      - "${BIND_ADDR:-127.0.0.1}:9099:9099"   # Auth
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4400/emulators').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+    # Give the emulators time to export their data on shutdown.
+    stop_grace_period: 60s
+
+  # One-shot: loads demo users + a demo event. Skips if already seeded;
+  # `podman compose run --rm seed --reset` wipes all emulator data and reseeds.
+  seed:
+    image: node:22-trixie-slim
+    working_dir: /app
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+      - ./package.json:/app/package.json:ro
+    environment:
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+    entrypoint: ["node", "scripts/seed-emulator.mjs"]
+    depends_on:
+      emulators:
+        condition: service_healthy
+    restart: "no"
+
+  # On demand only (profile): copy the production data into the emulators,
+  # read-only on production. See docs/local-testing.md.
+  #   PROD_READER_KEY=/path/to/prod-reader.json podman compose run --rm prod-copy
+  prod-copy:
+    profiles: ["prod-copy"]
+    image: node:22-trixie-slim
+    working_dir: /app
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ${PROD_READER_KEY:-/dev/null}:/secrets/prod-reader.json:ro
+      - prod-copy:/copy
+    environment:
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+    entrypoint: ["node", "scripts/prod-copy.mjs"]
+    depends_on:
+      emulators:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    image: node:22-trixie-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+    environment:
+      DEV_WATCH_POLLING: "true"
+      # Fail-safe: the demo project config is fixed here, at container start.
+      # Process env beats every .env file in Vite, so even if the mounted
+      # working tree is switched to a branch without .env.emulator or without
+      # the emulator code, the app uses the offline-only demo-fistball project
+      # and can never reach production. (Mirrors .env.emulator.)
+      VITE_USE_EMULATOR: "true"
+      VITE_FIREBASE_PROJECT_ID: demo-fistball
+      VITE_FIREBASE_API_KEY: demo-api-key
+      VITE_FIREBASE_AUTH_DOMAIN: demo-fistball.firebaseapp.com
+      VITE_FIREBASE_STORAGE_BUCKET: demo-fistball.appspot.com
+      VITE_FIREBASE_MESSAGING_SENDER_ID: "0"
+      VITE_FIREBASE_APP_ID: "1:0:web:0"
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:5173:5173"
+    entrypoint: ["/app/docker/app-entrypoint.sh"]
+    depends_on:
+      - emulators
+
+volumes:
+  emulator-data:
+  app-node-modules:
+  prod-copy:

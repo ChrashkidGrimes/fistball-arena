@@ -1,0 +1,3 @@
+# Image builds only need docker/ (keeps the macOS node_modules out of the context).
+*
+!docker/

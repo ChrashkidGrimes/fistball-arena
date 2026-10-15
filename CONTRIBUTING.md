@@ -31,7 +31,11 @@ npm run build            # production build
 npm run lint             # oxlint
 ```
 
-You need a **Firebase project** (Google Auth + Firestore) — see the
+No Firebase project yet? `podman compose up -d --build` (or `docker compose`)
+starts the app against the Firebase emulators with demo users and data — see
+[docs/local-testing.md](docs/local-testing.md).
+
+Otherwise you need a **Firebase project** (Google Auth + Firestore) — see the
 [README](README.md) for the full setup, including publishing `firestore.rules`
 and the `members.email` collection-group index.
 

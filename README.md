@@ -37,6 +37,9 @@ data lives in Firestore, secured by rules.
    npm run dev      # local dev server
    npm run build    # production build to dist/
    ```
+   To try it without a Firebase project, run the containerized local test
+   environment (emulators + demo data): see
+   [docs/local-testing.md](docs/local-testing.md).
 5. **Deploy** the `dist/` folder to any static host (GitHub Pages, Netlify,
    Firebase Hosting, …).
 
