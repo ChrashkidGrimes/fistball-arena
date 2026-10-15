@@ -67,7 +67,9 @@ in both categories with different uniforms.
 
 Emulator data is saved to the `emulator-data` volume when the emulators stop
 (`podman compose stop` or `down`) and reloaded on the next start. The seed
-skips if the demo event already exists.
+leaves existing demo events as they are and only adds missing ones (so after
+an update the new *Demo Club Cup* appears next to your *Demo Cup* data). It
+never adds demo data to a production copy.
 
 ```bash
 podman compose run --rm seed --reset   # wipe ALL emulator data and reseed

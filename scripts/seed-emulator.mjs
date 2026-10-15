@@ -258,10 +258,16 @@ async function commit(docs) {
   }
 }
 
-// Any event at all? (Also true after loading a production copy.)
-async function hasEvents() {
-  const res = await fetch(`http://${FS}/v1/${DOCS}/events?pageSize=1&showMissing=true`, { headers: OWNER });
-  return res.ok && ((await res.json()).documents || []).length > 0;
+// Ids of all events (incl. ones that only hold subcollections).
+async function eventIds() {
+  const ids = [];
+  let pageToken = "";
+  do {
+    const res = await call(`http://${FS}/v1/${DOCS}/events?pageSize=300&showMissing=true&mask.fieldPaths=name${pageToken ? `&pageToken=${pageToken}` : ""}`, { headers: OWNER });
+    ids.push(...(res.documents || []).map((d) => d.name.split("/").pop()));
+    pageToken = res.nextPageToken || "";
+  } while (pageToken);
+  return ids;
 }
 
 // Create (or refresh) a Google-provider account in the Auth emulator. The
@@ -323,8 +329,19 @@ async function main() {
     await call(`http://${FS}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: "DELETE" });
     await call(`http://${AUTH}/emulator/v1/projects/${PROJECT}/accounts`, { method: "DELETE" });
     console.log("Emulator data wiped.");
-  } else if (await hasEvents()) {
-    console.log("Emulator already has events (demo data or a production copy) — use --reset to start over.");
+  }
+  // Demo data is added event by event: events that already exist are left
+  // as they are, missing demo events are added (e.g. the club event after
+  // an update). A production copy is never mixed with demo data.
+  const existing = RESET ? [] : await eventIds();
+  if (existing.some((id) => !id.startsWith("demo-"))) {
+    console.log("Emulator holds a production copy — use --reset to go back to demo data.");
+    return;
+  }
+  const missing = (id) => !existing.includes(id);
+  const demoIds = [EVENT_ID, CLUB_EVENT_ID];
+  if (!demoIds.some(missing) && !missing("demo-archive")) {
+    console.log("Demo events already there — use --reset to start over.");
     return;
   }
 
@@ -337,29 +354,39 @@ async function main() {
   // the others as event members, mirrored onto people/{email} like the app does.
   for (const u of USERS) {
     const person = { email: u.email, name: u.name };
-    if (u.role) person.events = { [EVENT_ID]: u.role, [CLUB_EVENT_ID]: u.role };
+    if (u.role) person.events = Object.fromEntries(demoIds.map((id) => [id, u.role]));
     docs.push([`people/${u.email}`, person]);
     if (u.orgAdmin) docs.push([`orgAdmins/${u.email}`, { email: u.email, name: u.name, addedBy: "seed", addedAt: now }]);
-    if (u.role) for (const id of [EVENT_ID, CLUB_EVENT_ID]) docs.push([`events/${id}/members/${u.email}`, { email: u.email, name: u.name, role: u.role, addedBy: "seed", addedAt: now }]);
+    if (u.role) for (const id of demoIds.filter(missing)) docs.push([`events/${id}/members/${u.email}`, { email: u.email, name: u.name, role: u.role, addedBy: "seed", addedAt: now }]);
   }
 
+  const added = [];
   const national = eventDocs({ id: EVENT_ID, ev: event, men: MEN, women: WOMEN, catMen: CAT_MEN, catWomen: CAT_WOMEN,
     teamKits: TEAM_KITS, refKits: REF_KITS, officials: REFEREES, squadOffset: 0 }, now);
   const clubs = eventDocs({ id: CLUB_EVENT_ID, ev: clubEvent, men: CLUB_MEN, women: CLUB_WOMEN, catMen: CLUB_MEN_CAT, catWomen: CLUB_WOMEN_CAT,
     teamKits: CLUB_KITS, refKits: CLUB_REF_KITS, officials: CLUB_OFFICIALS, squadOffset: 40 }, now);
-  docs.push(...national.docs, ...clubs.docs);
-  docs.push(["public/live", { eventId: EVENT_ID, name: event.name, startsAt: event.startDate, endsAt: event.endDate, updatedAt: now }]);
+  if (missing(EVENT_ID)) {
+    docs.push(...national.docs);
+    docs.push(["public/live", { eventId: EVENT_ID, name: event.name, startsAt: event.startDate, endsAt: event.endDate, updatedAt: now }]);
+    added.push(`"${event.name}" (${national.games} games, ${national.rosters} rosters, ${national.officials} officials, kits for ${Object.keys(TEAM_KITS).length} teams, ${REF_KITS.length} referee shirt colours)`);
+  }
+  if (missing(CLUB_EVENT_ID)) {
+    docs.push(...clubs.docs);
+    added.push(`"${clubEvent.name}" (club teams: ${clubs.games} games, ${clubs.rosters} rosters, ${clubs.officials} officials)`);
+  }
 
   // A finished past event, so the events timeline isn't empty.
-  const past = day(-60);
-  docs.push(["events/demo-archive", {
-    name: "Demo Open (archived)", place: "Altstadt", dates: `${past.getDate()} ${MON[past.getMonth()]} ${past.getFullYear()}`,
-    startDate: iso(past), endDate: iso(past), status: "archived", createdBy: "seed", createdAt: now,
-  }]);
+  if (missing("demo-archive")) {
+    const past = day(-60);
+    docs.push(["events/demo-archive", {
+      name: "Demo Open (archived)", place: "Altstadt", dates: `${past.getDate()} ${MON[past.getMonth()]} ${past.getFullYear()}`,
+      startDate: iso(past), endDate: iso(past), status: "archived", createdBy: "seed", createdAt: now,
+    }]);
+    added.push(`"Demo Open (archived)"`);
+  }
 
   await commit(docs);
-  console.log(`Seeded ${USERS.length} users, event "${event.name}" (${national.games} games, ${national.rosters} rosters, ${national.officials} officials, kits for ${Object.keys(TEAM_KITS).length} teams, ${REF_KITS.length} referee shirt colours)`
-    + ` and "${clubEvent.name}" (club teams: ${clubs.games} games, ${clubs.rosters} rosters, ${clubs.officials} officials).`);
+  console.log(`Seeded ${USERS.length} users and ${added.join(", ")}.`);
   console.log("Sign in with one of: " + USERS.map((u) => u.email).join(", "));
 }
 
