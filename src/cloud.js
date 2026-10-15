@@ -303,7 +303,7 @@ export async function setTeamLogo(teamName, dataUrl) {
 }
 
 /* ----------------- team kits (uniforms) ----------------- */
-// One public doc per event: { eventId, kits: { [kitKey(team, category)]: [{shirt, shorts}, {shirt, shorts}] } }
+// One public doc per event: { eventId, kits: { [kitKey(team, category)]: [{ colors }, { colors }] } }
 // — up to two uniforms per team. Games pick one by number (see saveGameKit);
 // public so Fistball Live can show which uniform each team wears.
 const teamKitsRef = (eid) => doc(db, "public", `teamkits_${eid}`);
