@@ -72,12 +72,13 @@ function squad(teamIdx, women) {
 // officials fields from src/officials/model.js (older app versions ignore them).
 const official = (role, roles) => ([name, first, country, gender, assistantPair]) =>
   ({ name, first, role, roles, country, gender, ...(assistantPair ? { assistantPair } : {}), photo: "", birthday: "" });
-// Uniforms: two shirt colours per team
+// Uniforms: two jersey colours per team
 // and the event's referee shirt colours. Several teams share red / white, so
 // "all in Uniform 1" clashes and "Suggest uniforms" has something to solve;
 // every pairing (incl. knockout) is solvable, each with a fitting referee shirt.
 const WHITE = "#ffffff", BLACK = "#1a1a1a", RED = "#e23b3b", YELLOW = "#f2c20a", BLUE = "#2f6df0";
-const kits = (s1, s2) => [{ shirt: s1 }, { shirt: s2 }];
+// A uniform is its jersey colours ({ colors }, up to 3 — an array = stripes).
+const kits = (...uniforms) => uniforms.map((u) => ({ colors: [u].flat() }));
 const TEAM_KITS = {
   Germany: kits(WHITE, BLACK),
   Austria: kits(RED, WHITE),
@@ -156,7 +157,8 @@ const event = {
 // each club with its nation and club name. Some officials belong to a
 // playing club (never used for that club's games); in club competitions a
 // referee from a club's nation is only a warning. Elgg plays in both
-// categories with different uniforms (kits per team and category).
+// categories with different uniforms (kits per team and category);
+// Pfungstadt, Ahlhorn and Schneverdingen have striped first jerseys.
 const CLUB_EVENT_ID = "demo-club-cup";
 const CLUB_MEN_CAT = "Clubs Men", CLUB_WOMEN_CAT = "Clubs Women";
 const CLUBS = [ // name, short, nation, categories
@@ -174,11 +176,11 @@ const NAVY = "#1c2c66", SKY = "#38bdf8", VIOLET = "#7c3aed";
 const ck = (team, cat) => `${team} · ${cat}`; // kits per team and category (src/kits.js kitKey)
 const CLUB_KITS = {
   [ck("Elgg", CLUB_MEN_CAT)]: kits(WHITE, BLACK), [ck("Linz", CLUB_MEN_CAT)]: kits(BLUE, BLACK),
-  [ck("Pfungstadt", CLUB_MEN_CAT)]: kits(YELLOW, BLACK), [ck("Vöcklabruck", CLUB_MEN_CAT)]: kits(WHITE, RED),
+  [ck("Pfungstadt", CLUB_MEN_CAT)]: kits([YELLOW, BLACK], BLACK), [ck("Vöcklabruck", CLUB_MEN_CAT)]: kits(WHITE, RED),
   [ck("Hagen", CLUB_MEN_CAT)]: kits(YELLOW, BLUE), [ck("Wigoltingen", CLUB_MEN_CAT)]: kits(BLACK, VIOLET),
-  [ck("Ahlhorn", CLUB_WOMEN_CAT)]: kits(NAVY, SKY), [ck("Diepoldsau", CLUB_WOMEN_CAT)]: kits(BLUE, WHITE),
+  [ck("Ahlhorn", CLUB_WOMEN_CAT)]: kits([NAVY, SKY], SKY), [ck("Diepoldsau", CLUB_WOMEN_CAT)]: kits(BLUE, WHITE),
   [ck("Elgg", CLUB_WOMEN_CAT)]: kits(BLUE, BLACK), [ck("Freistadt", CLUB_WOMEN_CAT)]: kits(RED, BLACK),
-  [ck("Schneverdingen", CLUB_WOMEN_CAT)]: kits(RED, WHITE), [ck("Nussbach", CLUB_WOMEN_CAT)]: kits(BLACK, WHITE),
+  [ck("Schneverdingen", CLUB_WOMEN_CAT)]: kits([RED, WHITE], WHITE), [ck("Nussbach", CLUB_WOMEN_CAT)]: kits(BLACK, WHITE),
 };
 const CLUB_REF_KITS = [
   { id: "ref-black", name: "Black", shirt: BLACK },
