@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { subscribeGames, subscribeReferees, saveGameRefs } from "../cloud.js";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
-import { teamMeta } from "../officials/model.js";
+import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, availableAt, sameCountry } from "../officials/model.js";
 import { checkAssignments, cellLevel, SLOT_LABEL } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
+import AutoAssignModal from "./AutoAssignModal.jsx";
 
-const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["a1", "Assistant 1"], ["a2", "Assistant 2"]];
+const ROLES = [["r1", "Referee 1"], ["r2", "Referee 2"], ["clerk", "Clerk"], ["a1", "Assistant 1"], ["a2", "Assistant 2"], ["cm", "Court manager"]];
 const parseDate = (s) => { const [d, m, y] = String(s).split("/").map(Number); return new Date(2000 + (y || 0), (m || 1) - 1, d || 1); };
 const dayLabel = (s) => { const dt = parseDate(s); return `${dt.toLocaleDateString("en-US", { weekday: "short" })} ${dt.getDate()} ${dt.toLocaleDateString("en-US", { month: "short" })}`; };
 const refName = (r) => [r.first, r.name].filter(Boolean).join(" ").trim();
@@ -23,25 +24,24 @@ export default function Referees() {
   const [day, setDay] = useState("all");
   const [q, setQ] = useState("");
   const [local, setLocal] = useState({});   // gameId -> {r1,..} optimistic overlay
+  const [localAuto, setLocalAuto] = useState({}); // gameId -> {r1: true,..} which slots auto-assign filled
   const [saved, setSaved] = useState({});    // gameId -> ts (flash "saved")
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [showList, setShowList] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(false);
   const timers = useRef({});
 
   useEffect(() => subscribeGames(setGames), []);
   useEffect(() => subscribeReferees(setRefs), []);
 
-  const names = useMemo(() => [...new Set(refs.map(refName).filter(Boolean))].sort(), [refs]);
-  // Flag of an official's nation, by the name typed in a cell.
-  const flagByName = useMemo(() => new Map(refs.map((r) => [refName(r).toLowerCase(), flagFor(r.country)])), [refs]);
+  const sortedRefs = useMemo(() => [...refs].sort((a, b) => refName(a).localeCompare(refName(b))), [refs]);
   const teamNations = useMemo(() => [...new Set((event?.entries || []).map((e) => teamMeta(event.entries, e.name).country).filter(Boolean))].sort(), [event]);
   const days = useMemo(() => [...new Set(games.map((g) => g.date))].sort((a, b) => parseDate(a) - parseDate(b)), [games]);
   // Rule checks over ALL games (games in a row / double booking span the day),
   // including unsaved edits. See src/officials/rules.js.
-  const check = useMemo(() => {
-    const merged = games.map((g) => (local[g.id] ? { ...g, refs: local[g.id] } : g));
-    return checkAssignments(merged, refs, event?.entries || []);
-  }, [games, local, refs, event]);
+  const merged = useMemo(() => games.map((g) => (local[g.id] || localAuto[g.id]
+    ? { ...g, refs: local[g.id] || g.refs, refsAuto: localAuto[g.id] || g.refsAuto } : g)), [games, local, localAuto]);
+  const check = useMemo(() => checkAssignments(merged, refs, event?.entries || []), [merged, refs, event]);
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     return games
@@ -54,14 +54,109 @@ export default function Referees() {
   if (!isAdmin) return <div className="empty">Admins only.</div>;
 
   const valOf = (g, k) => (local[g.id]?.[k] ?? g.refs?.[k] ?? "");
+  // Slots filled by auto-assign are flagged in game.refsAuto; any other filled
+  // slot (picked here, or from before the flag existed) counts as set by hand.
+  const autoOf = (g) => localAuto[g.id] || g.refsAuto || {};
+  const isManual = (g, k) => !!String(valOf(g, k)).trim() && !autoOf(g)[k];
   const setVal = (g, k, v) => {
     const next = { ...(local[g.id] || { ...(g.refs || {}) }), [k]: v };
+    const nextAuto = { ...autoOf(g), [k]: false };
     setLocal((p) => ({ ...p, [g.id]: next }));
+    setLocalAuto((p) => ({ ...p, [g.id]: nextAuto }));
     clearTimeout(timers.current[g.id]);
     timers.current[g.id] = setTimeout(async () => {
-      try { await saveGameRefs(g.id, next); setSaved((s) => ({ ...s, [g.id]: Date.now() })); setTimeout(() => setSaved((s) => { const n = { ...s }; delete n[g.id]; return n; }), 1500); }
+      try { await saveGameRefs(g.id, next, nextAuto); setSaved((s) => ({ ...s, [g.id]: Date.now() })); setTimeout(() => setSaved((s) => { const n = { ...s }; delete n[g.id]; return n; }), 1500); }
       catch (e) { alert("Could not save referees for #" + g.nr + ": " + (e?.code || e?.message || e)); }
     }, 500);
+  };
+
+  // Picker for one slot: officials with that role first, the rest below; each
+  // with flag and short hints (own nation, busy at this time, away, already
+  // in this game) so problems show before picking. "Other name…" allows a
+  // name outside the registry.
+  const busyAt = new Map(); // "date|time" → name → [{ nr, slot }]
+  for (const x of merged) for (const [k] of ROLES) {
+    const n = String(x.refs?.[k] ?? "").trim().toLowerCase();
+    if (!n) continue;
+    const key = `${x.date}|${x.time}`;
+    if (!busyAt.has(key)) busyAt.set(key, new Map());
+    const m = busyAt.get(key);
+    m.set(n, [...(m.get(n) || []), { nr: x.nr, slot: k }]);
+  }
+  // Wide enough for the longest name in the registry (flag + name), so every
+  // picked name is shown in full; the hints only appear in the open list.
+  // (ch = width of "0"; names in a proportional font run ~15% wider, plus the
+  // flag and the select's arrow.)
+  const pickerWidth = `calc(${(Math.max(12, ...sortedRefs.map((o) => refName(o).length)) * 1.15 + 3).toFixed(1)}ch + 40px)`;
+  const officialPicker = (g, k, placeholder) => {
+    const v = String(valOf(g, k)).trim();
+    const known = sortedRefs.find((o) => refName(o).toLowerCase() === v.toLowerCase());
+    const value = known ? refName(known) : v;
+    const A = teamMeta(event?.entries, g.teamA), B = teamMeta(event?.entries, g.teamB);
+    const label = (o) => {
+      const n = refName(o), lower = n.toLowerCase(), hints = [];
+      if (ROLES.some(([s]) => s !== k && String(valOf(g, s)).trim().toLowerCase() === lower)) hints.push("in this game");
+      // Court manager on other courts at the same time is fine (only for the court manager slot).
+      const other = (busyAt.get(`${g.date}|${g.time}`)?.get(lower) || []).filter((x) => x.nr !== g.nr && !(k === "cm" && x.slot === "cm")).map((x) => x.nr);
+      if (other.length) hints.push(`busy (#${other.join(", #")})`);
+      if (!availableAt(o, g.date, g.time)) hints.push("away");
+      if ((k === "r1" || k === "r2") && o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country))) hints.push("own nation");
+      return `${flagFor(o.country)} ${n}${hints.length ? " — " + hints.join(", ") : ""}`.trim();
+    };
+    const text = (o) => (refName(o) === value ? `${flagFor(o.country)} ${refName(o)}`.trim() : label(o));
+    const fits = sortedRefs.filter((o) => canFill(o, k)), others = sortedRefs.filter((o) => !canFill(o, k));
+    const pick = (e) => {
+      if (e.target.value !== "__other__") { setVal(g, k, e.target.value); return; }
+      const n = prompt("Name of the official (not in the registry):", value);
+      if (n !== null) setVal(g, k, n.trim());
+    };
+    return (
+      <select className="ref-input" style={{ width: pickerWidth }} value={value} disabled={archived} onChange={pick} aria-label={`${ROLES.find(([s]) => s === k)[1]} of game ${g.nr}`}>
+        <option value="">{placeholder}</option>
+        {v && !known && <option value={v}>{v} (not in the registry)</option>}
+        <optgroup label={`${ROLE_LABEL[SLOT_ROLE[k]]}s`}>{fits.map((o) => <option key={o.id} value={refName(o)}>{text(o)}</option>)}</optgroup>
+        {others.length > 0 && <optgroup label="Other officials">{others.map((o) => <option key={o.id} value={refName(o)}>{text(o)}</option>)}</optgroup>}
+        <option value={"__other__"}>Other name…</option>
+      </select>
+    );
+  };
+
+  // Write an auto-assign proposal: one saveGameRefs per changed game.
+  const applyProposal = async (res) => {
+    const byGame = {};
+    for (const p of res.proposals) (byGame[p.gameId] ||= {})[p.slot] = p.to;
+    const next = {}, nextAuto = {};
+    for (const g of merged) if (byGame[g.id]) {
+      next[g.id] = { ...(g.refs || {}), ...byGame[g.id] };
+      nextAuto[g.id] = { ...autoOf(g), ...Object.fromEntries(Object.entries(byGame[g.id]).map(([s, to]) => [s, !!to])) };
+    }
+    setLocal((p) => ({ ...p, ...next }));
+    setLocalAuto((p) => ({ ...p, ...nextAuto }));
+    await Promise.all(Object.entries(next).map(([id, r]) => saveGameRefs(id, r, nextAuto[id])));
+  };
+
+  // Remove every official from the games of the selected day (or all days).
+  // Existing game reports keep their referees; only the planning is cleared.
+  // Remove officials from the games of the selected day (or all days): only
+  // the auto-assigned ones (manual picks stay), or all of them. Existing game
+  // reports keep their referees; only the planning is cleared.
+  const clearAssignments = async (onlyAuto) => {
+    const clears = (g, k) => !!String(valOf(g, k)).trim() && (!onlyAuto || !isManual(g, k));
+    const targets = merged.filter((g) => (day === "all" || g.date === day) && ROLES.some(([k]) => clears(g, k)));
+    const when = day === "all" ? "all days" : dayLabel(day);
+    if (!targets.length) { alert(`No ${onlyAuto ? "auto-assigned " : ""}officials (${when}).`); return; }
+    const n = targets.reduce((s, g) => s + ROLES.filter(([k]) => clears(g, k)).length, 0);
+    const kept = onlyAuto ? merged.filter((g) => day === "all" || g.date === day).reduce((s, g) => s + ROLES.filter(([k]) => isManual(g, k)).length, 0) : 0;
+    if (!confirm(`Remove ${n} ${onlyAuto ? "auto-assigned " : ""}official${n === 1 ? "" : "s"} from ${targets.length} game${targets.length === 1 ? "" : "s"} (${when})?${kept ? ` ${kept} set by hand stay.` : ""} Game reports that already exist keep their referees.`)) return;
+    const next = {}, nextAuto = {};
+    for (const g of targets) {
+      next[g.id] = Object.fromEntries(ROLES.map(([k]) => [k, clears(g, k) ? "" : String(valOf(g, k))]));
+      nextAuto[g.id] = {}; // what's left is set by hand
+    }
+    setLocal((p) => ({ ...p, ...next }));
+    setLocalAuto((p) => ({ ...p, ...nextAuto }));
+    try { await Promise.all(targets.map((g) => saveGameRefs(g.id, next[g.id], nextAuto[g.id]))); }
+    catch (e) { alert("Could not clear: " + (e?.code || e?.message || e)); }
   };
 
   return (
@@ -79,10 +174,18 @@ export default function Referees() {
       </div>
       <input className="game-search" style={{ maxWidth: 360, marginBottom: 10 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search game # or team…" />
 
+      {!archived && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button className="btn primary sm" onClick={() => setAutoOpen(true)} disabled={!refs.length} title={refs.length ? "" : "Add officials first"}>Auto-assign…</button>
+          <button className="btn sm" onClick={() => clearAssignments(true)} title={`Remove the auto-assigned officials (${day === "all" ? "all days" : dayLabel(day)}); officials set by hand stay`}>Clear auto-assigned…</button>
+          <button className="btn sm" onClick={() => clearAssignments(false)} title={`Remove all officials (${day === "all" ? "all days" : dayLabel(day)})`}>Clear all…</button>
+        </div>
+      )}
+      {autoOpen && <AutoAssignModal games={merged} refs={refs} entries={event?.entries || []} days={days} day={day} dayLabel={dayLabel} onApply={applyProposal} onClose={() => setAutoOpen(false)} />}
+      <LoadOverview games={merged} days={days} dayLabel={dayLabel} />
       <IssueSummary check={check} games={games} day={day} showList={showList} setShowList={setShowList}
         issuesOnly={issuesOnly} setIssuesOnly={setIssuesOnly} onPick={(g) => { setDay("all"); setQ(String(g.nr)); }} />
 
-      <datalist id="ref-names">{names.map((n) => <option key={n} value={n} />)}</datalist>
 
       <div className="grid-scroll">
         <table className="ref-grid">
@@ -106,10 +209,10 @@ export default function Referees() {
                   const lvl = cellLevel(iss);
                   const empty = !String(valOf(g, k)).trim();
                   return (
-                    <td key={k} className={`ag-cell ${lvl ? `rg-${empty ? "missing" : lvl}` : ""}`} title={iss ? iss.map((i) => (i.level === "hard" ? "⛔ " : "⚠ ") + i.msg).join("\n") : undefined}>
-                      <span className="flag">{flagByName.get(String(valOf(g, k)).trim().toLowerCase()) || ""}</span>
-                      <input className="ref-input" list="ref-names" value={valOf(g, k)} disabled={archived}
-                        onChange={(e) => setVal(g, k, e.target.value)} placeholder={empty && lvl ? "required" : "—"} />
+                    <td key={k} className={`ag-cell ${lvl ? `rg-${empty ? "missing" : lvl}` : ""} ${isManual(g, k) ? "ag-manual" : ""}`}
+                      title={[isManual(g, k) && "✎ Set by hand", ...(iss || []).map((i) => (i.level === "hard" ? "⛔ " : "⚠ ") + i.msg)].filter(Boolean).join("\n") || undefined}>
+                      {isManual(g, k) && <span className="ag-manual-mark" aria-label="Set by hand">✎ manual</span>}
+                      {officialPicker(g, k, empty && lvl ? "required" : "—")}
                       {lvl && !empty && <span className={`rg-badge rg-badge-${lvl}`}>{iss.length > 1 ? iss.length : "!"}</span>}
                     </td>
                   );
@@ -152,5 +255,40 @@ function IssueSummary({ check, games, day, showList, setShowList, issuesOnly, se
         </ul>
       )}
     </div>
+  );
+}
+
+// Games per official per day, split by role (referee 1/2, assistant 1/2,
+// clerk), to spot an uneven load at a glance.
+const ROLE_OF = { r1: "referee", r2: "referee", a1: "assistant", a2: "assistant", clerk: "clerk", cm: "courtManager" };
+function LoadOverview({ games, days, dayLabel }) {
+  const rows = useMemo(() => {
+    const m = new Map();
+    for (const g of games) for (const [slot, role] of Object.entries(ROLE_OF)) {
+      const n = String(g.refs?.[slot] ?? "").trim();
+      if (!n) continue;
+      const k = n.toLowerCase();
+      if (!m.has(k)) m.set(k, { name: n, total: 0, day: {} });
+      const r = m.get(k); r.total++;
+      const d = (r.day[g.date] ||= { referee: 0, assistant: 0, clerk: 0, courtManager: 0 }); d[role]++;
+    }
+    return [...m.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  }, [games]);
+  if (!rows.length) return null;
+  const fmt = (d) => (d ? ["referee", "assistant", "clerk", "courtManager"].filter((r) => d[r]).map((r) => `${d[r]}× ${ROLE_LABEL[r]}`).join(" · ") : "");
+  return (
+    <details className="adv-tool" style={{ marginBottom: 10 }}>
+      <summary>Load per official</summary>
+      <div className="grid-scroll">
+        <table className="ref-grid">
+          <thead><tr><th>Official</th>{days.map((d) => <th key={d}>{dayLabel(d)}</th>)}<th>Total</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.name}><td className="of-name">{r.name}</td>{days.map((d) => <td key={d} className="muted-sm">{fmt(r.day[d])}</td>)}<td><b>{r.total}</b></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }
