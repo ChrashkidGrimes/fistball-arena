@@ -745,6 +745,41 @@ async function getRoster(teamName, category) {
   }
   return null;
 }
+// Rename a team in this event's published games — game docs, public results
+// and game reports — e.g. when the schedule spelled it differently from the
+// players & staff registry ("Puntas Chica" vs "Punta Chica"). A report whose
+// line-up is still empty gets the registered players & staff. category limits
+// it to one category ("" = all). Returns how many games changed.
+export async function renameTeamInGames(fromName, toName, category = "") {
+  if (!fromName || !toName || fromName === toName) return 0;
+  const gsnap = await getDocs(ecol("games"));
+  let changed = 0;
+  for (const d of gsnap.docs) {
+    const g = d.data();
+    if (category && g.category !== category) continue;
+    const sides = ["teamA", "teamB"].filter((s) => g[s]?.name === fromName);
+    if (!sides.length) continue;
+    const gameUpd = {}, resUpd = {}, repUpd = {};
+    const rep = await getDoc(edoc("reports", d.id));
+    const roster = await getRoster(toName, g.category);
+    for (const s of sides) {
+      gameUpd[s] = { ...g[s], name: toName };
+      resUpd[s] = toName;
+      if (rep.exists()) {
+        const cur = rep.data()[s] || {};
+        repUpd[s] = (cur.players || []).length || !roster
+          ? { ...cur, name: toName }
+          : cloneTeam({ name: toName, players: roster.players || [], staff: roster.staff || [] });
+      }
+    }
+    await updateDoc(d.ref, gameUpd);
+    await setDoc(edoc("results", d.id), resUpd, { merge: true });
+    if (rep.exists()) await updateDoc(edoc("reports", d.id), repUpd);
+    changed++;
+  }
+  return changed;
+}
+
 export async function fetchTeamRosters(names, category) {
   const out = {};
   for (const name of [...new Set(names)]) {

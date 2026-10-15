@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchRosters } from "../roster/importRoster.js";
 import ExcelImport from "../roster/ExcelImport.jsx";
-import { subscribeRosters, subscribeResults, publishRosters, addMember, updateRosterPlayers } from "../cloud.js";
+import { subscribeRosters, subscribeResults, subscribeGames, publishRosters, addMember, updateRosterPlayers, renameTeamInGames, rosterKey } from "../cloud.js";
 import { flagFor } from "../flags.js";
 import { eventCategoryNames } from "../categories.js";
 import { useEvent } from "../eventContext.js";
@@ -29,10 +29,9 @@ export default function Roster({ me }) {
 
   useEffect(() => subscribeRosters(setRosters), []);
   useEffect(() => subscribeResults(setResults), []);
-
-  if (!isAdmin) {
-    return <div className="empty">Admins only. <button className="btn" onClick={() => nav(`/e/${eventId}`)}>Back</button></div>;
-  }
+  const [games, setGames] = useState([]);
+  useEffect(() => subscribeGames(setGames), []);
+  const [fixTo, setFixTo] = useState({}); // "name|category" -> registered team name
 
   const doImport = async () => {
     setStatus("Reading DB tab…");
@@ -56,6 +55,34 @@ export default function Roster({ me }) {
     } catch (e) {
       setStatus("Save failed: " + (e?.message || e));
     }
+  };
+
+  // Teams on the schedule with no players & staff registered under that exact
+  // name (usually a spelling difference) — their game reports can't pre-fill.
+  const unmatched = useMemo(() => {
+    if (!rosters) return [];
+    const isPlaceholder = (n) => /(winner|loser)/i.test(n) || /\b\d+(st|nd|rd|th)\b/i.test(n);
+    const has = (name, cat) => !!(rosters[rosterKey(`${name} - ${cat}`)] || rosters[rosterKey(name)]);
+    const m = new Map();
+    for (const g of games) for (const t of [g.teamA?.name, g.teamB?.name]) {
+      if (!t || isPlaceholder(t) || has(t, g.category)) continue;
+      const k = `${t}|${g.category || ""}`;
+      const cur = m.get(k) || { name: t, category: g.category || "", games: 0 };
+      cur.games++;
+      m.set(k, cur);
+    }
+    return [...m.values()].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  }, [games, rosters]);
+  const registeredIn = (cat) => [...new Set(Object.values(rosters || {}).filter((t) => !cat || !t.category || t.category === cat).map((t) => t.name).filter(Boolean))].sort();
+  const doRename = async (u) => {
+    const to = fixTo[`${u.name}|${u.category}`];
+    if (!to) return;
+    if (!window.confirm(`Rename “${u.name}” to “${to}” in all ${u.category} games (schedule, reports and Fistball Live)? Reports with an empty line-up get the registered players.`)) return;
+    setStatus(`Renaming ${u.name}…`);
+    try {
+      const n = await renameTeamInGames(u.name, to, u.category);
+      setStatus(`Renamed “${u.name}” → “${to}” in ${n} game(s).`);
+    } catch (e) { setStatus("Rename failed: " + (e?.code || e?.message || e)); }
   };
 
   const teams = useMemo(() => {
@@ -95,9 +122,35 @@ export default function Roster({ me }) {
     [teams]
   );
 
+  // After every hook, so the hook order never changes.
+  if (!isAdmin) {
+    return <div className="empty">Admins only. <button className="btn" onClick={() => nav(`/e/${eventId}`)}>Back</button></div>;
+  }
+
   return (
     <>
       <h2 className="page-h">Players &amp; staff</h2>
+        {!archived && unmatched.length > 0 && (
+          <div className="card" style={{ maxWidth: "none" }}>
+            <h2>⚠️ Teams in the schedule without players</h2>
+            <p className="muted-sm">These names appear in the games but don't match any registered team, so their game reports can't load players. Usually it's a spelling difference — pick the registered team and rename it in the games.</p>
+            {unmatched.map((u) => {
+              const k = `${u.name}|${u.category}`;
+              return (
+                <div className="bulk-row" key={k} style={{ padding: "6px 0", borderTop: "1px solid var(--line)" }}>
+                  <span style={{ minWidth: 200 }}><span className="flag">{flagFor(u.name)}</span><b>{u.name}</b> <span className="muted-sm">· {u.category} · {u.games} game{u.games === 1 ? "" : "s"}</span></span>
+                  <span className="muted-sm">→</span>
+                  <select className="ag-role" value={fixTo[k] || ""} onChange={(e) => setFixTo((m) => ({ ...m, [k]: e.target.value }))}>
+                    <option value="">— registered team —</option>
+                    {registeredIn(u.category).map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <button className="btn sm primary" disabled={!fixTo[k]} onClick={() => doRename(u)}>Rename in games</button>
+                </div>
+              );
+            })}
+            {status && <p className="muted-sm" style={{ marginTop: 8 }}>{status}</p>}
+          </div>
+        )}
         {/* ---- Excel upload ---- */}
         <ExcelImport me={me} teamNames={(event?.entries || []).map((e) => e.name)} categories={eventCategoryNames(event)} />
 
