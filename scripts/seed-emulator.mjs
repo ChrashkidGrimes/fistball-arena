@@ -185,8 +185,8 @@ const CLUB_REF_KITS = [
   { id: "ref-lightblue", name: "Light blue", shirt: "#6ca0dc" },
   { id: "ref-mint", name: "Mint green", shirt: "#3eb489" },
 ];
-// Twice what one round needs: 2 courts, Referee 2 only in the finals rounds,
-// Clerk 2 on court 1 (→ 3 clerks per round).
+// Twice what one round needs: 3 courts, Referee 2 only in the finals rounds,
+// Clerk 2 on court 1 (→ per round 3 referees, 4 clerks, 6 assistants).
 const clubOfficial = (role, roles) => ([name, first, country, gender, club, rank, assistantPair]) => ({
   ...official(role, roles)([name, first, country, gender, assistantPair]),
   ...(club ? { club } : {}), ...(rank && rank !== "normal" ? { rank } : {}),
@@ -201,6 +201,7 @@ const CLUB_OFFICIALS = [
   ...[
     ["Albers", "Heike", "Germany", "f", "Ahlhorn"], ["Bäumer", "Tim", "Germany", "m", "Pfungstadt"], ["Frick", "Sandra", "Switzerland", "f", ""],
     ["Gasser", "Reto", "Switzerland", "m", "Diepoldsau"], ["Leitner", "Maria", "Austria", "f", ""], ["Pichler", "Florian", "Austria", "m", "Freistadt"],
+    ["Vogt", "Ines", "Germany", "f", "Hagen"], ["Zürcher", "Marco", "Switzerland", "m", ""],
   ].map(clubOfficial("Clerk", ["clerk"])),
   ...[["Hartmann", "Jörg", "Germany", "m", ""], ["Zangerl", "Theresa", "Austria", "f", ""]].map(clubOfficial("Court manager", ["courtManager"])),
   ...[
@@ -208,6 +209,8 @@ const CLUB_OFFICIALS = [
     ["Baumann", "Nina", "Switzerland", "f", "", "normal", "pair-2"], ["Meili", "Jan", "Switzerland", "m", "", "normal", "pair-2"],
     ["Egger", "Sara", "Austria", "f", "Nussbach", "normal", "pair-3"], ["Haas", "David", "Austria", "m", "Nussbach", "normal", "pair-3"],
     ["Lang", "Mia", "Germany", "f", "", "top", "pair-4"], ["Roth", "Felix", "Germany", "m", "", "top", "pair-4"],
+    ["Wirth", "Anja", "Austria", "f", "Vöcklabruck", "normal", "pair-5"], ["Kofler", "Paul", "Austria", "m", "Vöcklabruck", "normal", "pair-5"],
+    ["Steiger", "Lara", "Switzerland", "f", "", "good", "pair-6"], ["Imhof", "Nico", "Switzerland", "m", "", "good", "pair-6"],
   ].map(clubOfficial("Assistant", ["assistant"])),
 ];
 const clubEvent = {
@@ -219,6 +222,7 @@ const clubEvent = {
   entries: clubEntries,
   formatVariants: { [CLUB_MEN_CAT]: { bestOf: 3, bestOfKo: 5 }, [CLUB_WOMEN_CAT]: { bestOf: 3, bestOfKo: 5 } },
   officialsRules: { r2: "finals", clerk2Courts: ["1"], finalRefsOnLines: true },
+  slots: { ...event.slots, courts: ["1", "2", "3"] },
 };
 
 /* ----------------- Firestore REST helpers ----------------- */

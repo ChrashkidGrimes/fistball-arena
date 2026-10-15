@@ -56,6 +56,13 @@ pairs) and 2 court managers. Each team has two registered uniforms and the event
 referee shirt colours (mint green, black, red); no uniform is assigned to the
 games yet — try "Suggest uniforms" on the Uniforms page. It is also set as the live event. An archived event fills the timeline.
 
+A second event, *Demo Club Cup*, has **club teams** (categories "Clubs Men" /
+"Clubs Women", six clubs each, three courts): clubs carry a nation and a club
+name, some officials belong to a playing club (never used for its games), a
+referee from a club's nation is only a warning, and the event settings use
+Referee 2 only in the finals rounds and a second clerk on court 1. Elgg plays
+in both categories with different uniforms.
+
 ## Data & reset
 
 Emulator data is saved to the `emulator-data` volume when the emulators stop
