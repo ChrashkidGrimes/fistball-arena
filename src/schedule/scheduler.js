@@ -7,6 +7,22 @@
 
 const KO_RANK = { qf: 0, sf: 1, bronze: 2, final: 3 };
 
+// Phases a day can be limited to (Courts & schedule → per day). A day with no
+// phases ticked takes any game.
+export const DAY_PHASES = [
+  ["group", "Groups"], ["qf", "Quarterfinals"], ["placement", "Placements"],
+  ["sf", "Semifinals"], ["bronze", "Bronze"], ["final", "Final"],
+];
+export function phaseOf(f) {
+  if (f.phase === "group" || /qualification/i.test(f.round || "")) return "group";
+  const r = String(f.round || "");
+  if (/gold|^final/i.test(r)) return "final";
+  if (/bronze/i.test(r)) return "bronze";
+  if (/semi/i.test(r)) return "sf";
+  if (/quarter|play-?off/i.test(r)) return "qf";
+  return "placement";
+}
+
 function isPlaceholder(name) { return /\d/.test(name) || /(winner|loser)/i.test(name); }
 function realTeamKeys(f) {
   const keys = [];
@@ -31,14 +47,23 @@ export function normalizeSlots(s) {
   }
   return {
     courts: (s.courts || []).map(String),
-    days: days.map((d) => ({ date: d.date, start: d.start || "09:00", end: d.end || "18:00" })),
+    // A day may override the game duration (e.g. finals day, all best of 5).
+    days: days.map((d) => ({
+      date: d.date, start: d.start || "09:00", end: d.end || "18:00",
+      ...(Number(d.gameMinutes) > 0 ? { gameMinutes: Number(d.gameMinutes) } : {}),
+      ...(Array.isArray(d.phases) && d.phases.length ? { phases: d.phases } : {}),
+      ...(d.closed ? { closed: true } : {}),
+    })),
     gameMinutes, breakMinutes,
   };
 }
 
+// Game duration on a given day: its own override, else the event default.
+export const dayGameMinutes = (day, gameMinutes) => Number(day?.gameMinutes) || Number(gameMinutes) || 45;
+
 // Slots that fit in one day for one court (given the window and slot step).
 export function slotsPerDay(day, gameMinutes, breakMinutes) {
-  const step = Math.max(5, Number(gameMinutes || 45) + Number(breakMinutes || 0));
+  const step = Math.max(5, dayGameMinutes(day, gameMinutes) + Number(breakMinutes || 0));
   return Math.max(0, Math.floor((toMinutes(day.end) - toMinutes(day.start)) / step));
 }
 
@@ -51,22 +76,38 @@ function orderFixtures(fixtures) {
   return [...group, ...ko];
 }
 
-export function allocate(fixtures, slotConfig) {
+// occupied: games already published that must stay where they are
+// ([{ date, time, court }]) — their court-time is skipped when placing new
+// games (e.g. adding clubs to an event whose national-team schedule is set).
+export function allocate(fixtures, slotConfig, occupied = []) {
   const cfg = normalizeSlots(slotConfig);
   const { courts, days, gameMinutes, breakMinutes } = cfg;
-  const step = Math.max(5, gameMinutes + breakMinutes);
   const warnings = [];
 
   // Enumerate cells: each day's window → slots × courts. `global` keeps a big
   // per-day offset so slots in different days are never "adjacent" (rest check).
   const cells = [];
   let capacity = 0;
+  const busyCourt = new Map(); // `${date}|${court}` -> [[start, end)]
+  for (const o of occupied || []) {
+    if (!o?.date || !o?.time || o.court == null) continue;
+    const day = days.find((x) => x.date === o.date);
+    const t0 = toMinutes(o.time);
+    const k = `${o.date}|${o.court}`;
+    (busyCourt.get(k) || busyCourt.set(k, []).get(k)).push([t0, t0 + dayGameMinutes(day, gameMinutes)]);
+  }
+  const overlapsExisting = (date, court, t0, t1) => (busyCourt.get(`${date}|${court}`) || []).some(([a, b]) => t0 < b && a < t1);
+
   days.forEach((day, d) => {
+    if (day.closed) return; // no new games on this day
     const s0 = toMinutes(day.start);
+    const step = Math.max(5, dayGameMinutes(day, gameMinutes) + breakMinutes);
     const n = slotsPerDay(day, gameMinutes, breakMinutes);
-    capacity += n * courts.length;
     for (let s = 0; s < n; s++) for (let c = 0; c < courts.length; c++) {
-      cells.push({ d, s, c, global: d * 1000 + s, timeMin: s0 + s * step });
+      const timeMin = s0 + s * step;
+      if (overlapsExisting(day.date, String(courts[c]), timeMin, timeMin + dayGameMinutes(day, gameMinutes))) continue;
+      capacity++;
+      cells.push({ d, s, c, global: d * 1000 + s, timeMin });
     }
   });
 
@@ -84,12 +125,15 @@ export function allocate(fixtures, slotConfig) {
   const unplaced = [];
   let lastGroupGlobal = -1;
   let restViolations = 0;
+  let offPhase = 0;
   const busyAt = (g) => busy.get(g) || busy.set(g, new Set()).get(g);
   const playedOf = (k) => played.get(k) || played.set(k, new Set()).get(k);
 
-  function findCell(keys, floor, requireRest) {
+  function findCell(keys, floor, requireRest, phase) {
     for (const cell of cells) {
       if (cell.global < floor) continue;
+      const allowed = days[cell.d].phases;
+      if (phase && allowed && !allowed.includes(phase)) continue;
       const ck = `${cell.global}|${cell.c}`;
       if (cellUsed.has(ck)) continue;
       const slotTeams = busy.get(cell.global);
@@ -109,8 +153,11 @@ export function allocate(fixtures, slotConfig) {
     for (const dep of f.deps || []) if (placedAt.has(dep)) floor = Math.max(floor, placedAt.get(dep) + 1);
     if (f.phase === "ko") floor = Math.max(floor, lastGroupGlobal + 1);
 
-    let cell = findCell(keys, floor, true);
-    if (!cell) { cell = findCell(keys, floor, false); if (cell) restViolations++; }
+    // Respect the days' phase limits; only if impossible, place it anywhere.
+    const phase = phaseOf(f);
+    let cell = findCell(keys, floor, true, phase);
+    if (!cell) { cell = findCell(keys, floor, false, phase); if (cell) restViolations++; }
+    if (!cell) { cell = findCell(keys, floor, true) || findCell(keys, floor, false); if (cell) offPhase++; }
     if (!cell) { unplaced.push(f); continue; }
 
     cellUsed.add(`${cell.global}|${cell.c}`);
@@ -124,6 +171,7 @@ export function allocate(fixtures, slotConfig) {
     });
   }
 
+  if (offPhase > 0) warnings.push(`${offPhase} match(es) didn't fit on a day allowed for their phase and were placed on another day. Check the phases ticked per day.`);
   if (restViolations > 0) warnings.push(`${restViolations} match(es) had to be scheduled back-to-back for a team. Add slots or a court for more rest.`);
   if (unplaced.length > 0) warnings.push(`${unplaced.length} match(es) could not be placed under the constraints. Add slots or a court.`);
 
