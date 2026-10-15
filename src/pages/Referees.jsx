@@ -5,7 +5,7 @@ import { resolveKit, teamKitsFor } from "../kits.js";
 import { KitSwatch } from "../KitSwatch.jsx";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
-import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, rolesOf, availableAt, sameCountry, RANKS, RANK_LABEL, defaultGameRank, rankOf, officialsSettings } from "../officials/model.js";
+import { teamMeta, ROLE_LABEL, SLOT_ROLE, canFill, rolesOf, availableAt, sameCountry, RANKS, RANK_LABEL, defaultGameRank, rankOf, officialsSettings, minutesOn } from "../officials/model.js";
 import { checkAssignments, cellLevel, SLOT_LABEL, refsOnLines } from "../officials/rules.js";
 import OfficialsCard from "./OfficialsCard.jsx";
 import AutoAssignModal from "./AutoAssignModal.jsx";
@@ -117,7 +117,7 @@ export default function Referees() {
       // Court manager on other courts at the same time is fine (only for the court manager slot).
       const other = (busyAt.get(`${g.date}|${g.time}`)?.get(lower) || []).filter((x) => x.nr !== g.nr && !(k === "cm" && x.slot === "cm")).map((x) => x.nr);
       if (other.length) hints.push(`busy (#${other.join(", #")})`);
-      if (!availableAt(o, g.date, g.time, settings.gameMinutes)) hints.push("away");
+      if (!availableAt(o, g.date, g.time, minutesOn(settings, g.date))) hints.push("away");
       if ((k === "r1" || k === "r2") && o.country && (sameCountry(o.country, A.country) || sameCountry(o.country, B.country))) hints.push("own nation");
       if ((k === "r1" || k === "r2") && rankOf(o) !== "normal") hints.unshift(RANK_LABEL[rankOf(o)].toLowerCase());
       const l = loadOf.get(lower);
@@ -368,7 +368,7 @@ function AssignSettings({ settings, courts, archived }) {
           )) : <span className="muted-sm">no games yet</span>}
         </div>
         <label><input type="checkbox" checked={settings.finalRefsOnLines} disabled={archived} onChange={(e) => save({ finalRefsOnLines: e.target.checked })} /> In the final, the referees work the lines</label>
-        <p className="muted-sm">Availability windows use a game length of {settings.gameMinutes} min (Settings → Courts &amp; schedule).</p>
+        <p className="muted-sm">Availability windows use the game length of each day ({settings.gameMinutes} min unless a day sets its own — Settings → Courts &amp; schedule).</p>
       </div>
     </details>
   );

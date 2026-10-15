@@ -24,7 +24,7 @@
 
 import {
   canFill, parseRoles, availabilityOn, availableAt, parseSlots,
-  teamMeta, sameCountry, sameClub, isWomensGame, isWomenFinal, rankOf, rankLevel, gameRank, isClubGame,
+  teamMeta, sameCountry, sameClub, isWomensGame, isWomenFinal, rankOf, rankLevel, gameRank, isClubGame, minutesOn,
 } from "./model.js";
 import { checkAssignments, isKnockout, officialName, DEFAULT_RULES, SLOTS, isRequiredSlot, refsOnLines } from "./rules.js";
 import { isPlaceholder } from "../schedule/advance.js";
@@ -196,7 +196,7 @@ export function autoAssign(games, officials, entries, opts = {}) {
   const cost = (o, g, slot) => {
     const k = keyOf.get(o);
     if (!eligible(o, g, slot)) return null;
-    if (!availableAt(o, g.date, g.time, rules.gameMinutes)) return null;
+    if (!availableAt(o, g.date, g.time, minutesOn(rules, g.date))) return null;
     if (SLOTS.some((s) => norm(g.refs[s]) === k)) return null;
     if (S(k).booked.has(g.date + "|" + timeKey(g.time))) return null;
     if (slot === "cm") {
@@ -364,15 +364,15 @@ export function autoAssign(games, officials, entries, opts = {}) {
       for (const hole of holes) {
         const g = byId.get(hole.gameId), s = hole.slot;
         // Direct fill: someone free by now (or a court manager on a parallel court).
-        for (const o of pool) if (eligible(o, g, s) && availableAt(o, g.date, g.time, rules.gameMinutes)) consider([[g, s, officialName(o)]]);
+        for (const o of pool) if (eligible(o, g, s) && availableAt(o, g.date, g.time, minutesOn(rules, g.date))) consider([[g, s, officialName(o)]]);
         for (const [g2, s2] of cells) {
           if (Date.now() >= deadline) break;
           const v = g2.refs[s2], X = byKey.get(norm(v));
-          if (!X || !eligible(X, g, s) || !availableAt(X, g.date, g.time, rules.gameMinutes)) continue;
+          if (!X || !eligible(X, g, s) || !availableAt(X, g.date, g.time, minutesOn(rules, g.date))) continue;
           consider([[g2, s2, ""], [g, s, v]]);
           for (const Y of pool) {
             const vy = officialName(Y);
-            if (norm(vy) === norm(v) || !eligible(Y, g2, s2) || !availableAt(Y, g2.date, g2.time, rules.gameMinutes)) continue;
+            if (norm(vy) === norm(v) || !eligible(Y, g2, s2) || !availableAt(Y, g2.date, g2.time, minutesOn(rules, g2.date))) continue;
             consider([[g2, s2, vy], [g, s, v]]);
             for (const [g3, s3] of cells) {
               if ((g3 === g2 && s3 === s2) || norm(g3.refs[s3]) !== norm(vy)) continue;

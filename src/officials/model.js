@@ -157,7 +157,9 @@ export const isClubGame = (game) => /\b(clubs?|vereine?)\b/i.test(String(game?.c
 //   bronze / 3rd place and the final (elsewhere optional, by hand).
 // - clerk2Courts: courts with a second clerk (slot "clerk2").
 // - finalRefsOnLines: in the final, the referees work the lines.
-// - gameMinutes: game length for the availability windows.
+// - gameMinutes / dayMinutes: game length for the availability windows —
+//   the event's default and the days that set their own (Settings → Courts &
+//   schedule), see minutesOn().
 export function officialsSettings(event) {
   const r = event?.officialsRules || {};
   return {
@@ -169,5 +171,8 @@ export function officialsSettings(event) {
     // (as in the Reiden tool, helps balance the load).
     r2NationKo: r.r2NationKo === "lenient" ? "lenient" : "lastResort",
     gameMinutes: Number(event?.slots?.gameMinutes) || 45,
+    dayMinutes: Object.fromEntries((event?.slots?.days || []).filter((d) => Number(d?.gameMinutes) > 0).map((d) => [d.date, Number(d.gameMinutes)])),
   };
 }
+// Game length on a date (a day's own duration, else the event default).
+export const minutesOn = (settings, date) => settings?.dayMinutes?.[date] || settings?.gameMinutes || 45;

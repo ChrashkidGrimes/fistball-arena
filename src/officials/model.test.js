@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseRoles, parseGender, rolesOf, canFill, availabilityOn, availableAt, parseSlots, windowLabel,
-  isGoldFinal, isClubGame, officialsSettings,
+  isGoldFinal, isClubGame, officialsSettings, minutesOn,
   teamMeta, sameCountry, sameClub, isWomensGame, isFinalsRound, isWomenFinal,
   rankOf, parseRank, gameRank, defaultGameRank,
 } from "./model.js";
@@ -137,7 +137,12 @@ test("gold final, club games and the event settings", () => {
     [true, true, true, false, false, false, false]);
   assert.equal(isClubGame({ category: "Clubs U18 Men" }), true);
   assert.equal(isClubGame({ category: "National Teams U18 Men" }), false);
-  assert.deepEqual(officialsSettings({}), { r2: "always", clerk2Courts: [], finalRefsOnLines: true, r2NationKo: "lastResort", gameMinutes: 45 });
+  assert.deepEqual(officialsSettings({}), { r2: "always", clerk2Courts: [], finalRefsOnLines: true, r2NationKo: "lastResort", gameMinutes: 45, dayMinutes: {} });
   assert.deepEqual(officialsSettings({ officialsRules: { r2: "finals", clerk2Courts: [1, "2"], finalRefsOnLines: false, r2NationKo: "lenient" }, slots: { gameMinutes: 60 } }),
-    { r2: "finals", clerk2Courts: ["1", "2"], finalRefsOnLines: false, r2NationKo: "lenient", gameMinutes: 60 });
+    { r2: "finals", clerk2Courts: ["1", "2"], finalRefsOnLines: false, r2NationKo: "lenient", gameMinutes: 60, dayMinutes: {} });
+  // A day with its own game length (e.g. finals day, best of 5).
+  const st = officialsSettings({ slots: { gameMinutes: 45, days: [{ date: "12/09/26" }, { date: "13/09/26", gameMinutes: 70 }] } });
+  assert.deepEqual(st.dayMinutes, { "13/09/26": 70 });
+  assert.equal(minutesOn(st, "12/09/26"), 45);
+  assert.equal(minutesOn(st, "13/09/26"), 70);
 });

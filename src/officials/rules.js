@@ -12,18 +12,18 @@
 import {
   SLOT_ROLE, ROLE_LABEL, parseRoles, canFill, availabilityOn, availableAt, parseSlots,
   teamMeta, sameCountry, sameClub, isWomenFinal, RANK_LABEL, rankOf, rankLevel, gameRank,
-  isFinalsRound, isGoldFinal, isClubGame, windowLabel,
+  isFinalsRound, isGoldFinal, isClubGame, windowLabel, minutesOn,
 } from "./model.js";
 
 export const SLOTS = ["r1", "r2", "clerk", "clerk2", "a1", "a2", "cm"];
 export const SLOT_LABEL = { r1: "Referee 1", r2: "Referee 2", clerk: "Clerk", clerk2: "Clerk 2", a1: "Assistant 1", a2: "Assistant 2", cm: "Court manager" };
 
 // Plus the event settings (model.js officialsSettings): r2, clerk2Courts,
-// finalRefsOnLines, gameMinutes.
+// finalRefsOnLines, gameMinutes, dayMinutes.
 export const DEFAULT_RULES = {
   softInRow: 2, // this many consecutive rounds → warning (a free round after every game is preferred)
   hardInRow: 3, // this many consecutive rounds → hard violation
-  r2: "always", clerk2Courts: [], finalRefsOnLines: true, gameMinutes: 45, r2NationKo: "lastResort",
+  r2: "always", clerk2Courts: [], finalRefsOnLines: true, gameMinutes: 45, dayMinutes: {}, r2NationKo: "lastResort",
 };
 
 // Clerks may work game after game (stable table crews), court managers look
@@ -136,7 +136,7 @@ export function checkAssignments(games, officials, entries, opts = {}) {
       // 3. Availability.
       const av = availabilityOn(o, g.date);
       if (av.status === "unavailable") add(g.id, slot, "hard", "unavailable", "Not available this day");
-      else if (!availableAt(o, g.date, g.time, cfg.gameMinutes)) add(g.id, slot, "hard", "unavailable", `Only available ${windowLabel(av) || "at " + av.slots.join(", ")}`);
+      else if (!availableAt(o, g.date, g.time, minutesOn(cfg, g.date))) add(g.id, slot, "hard", "unavailable", `Only available ${windowLabel(av) || "at " + av.slots.join(", ")}`);
       else if (av.status === "reserve") add(g.id, slot, "soft", "reserve", "Reserve this day");
 
       // 1. Nation: hard for r1 always and r2 in group games; r2 in knockout
