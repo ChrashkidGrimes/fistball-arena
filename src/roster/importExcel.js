@@ -9,10 +9,11 @@
 //
 // Optional referee columns (officials assignment): Nation, Club, Gender,
 // Official Roles ("Referee, Assistant, Clerk" — also German words or the old
-// codes "SR, LR, AS"), Assistant Pair (or the older "LR Pair"). Blank → left out, so a re-import keeps
+// codes "SR, LR, AS"), Rank (Top / Good / Normal), Assistant Pair (or the
+// older "LR Pair"). Blank → left out, so a re-import keeps
 // what was edited in the app.
 
-import { parseRoles, parseGender } from "../officials/model.js";
+import { parseRoles, parseGender, parseRank } from "../officials/model.js";
 
 const GENDERS = {
   FEMALE: "Female", FEMININO: "Female", FEMININA: "Female", WOMEN: "Female",
@@ -94,6 +95,8 @@ function buildFromRows(rows) {
       if (g("Nation") || g("Country")) ref.country = g("Nation") || g("Country");
       if (g("Club")) ref.club = g("Club");
       if (sex) ref.gender = sex;
+      const rank = parseRank(g("Rank"));
+      if (rank) ref.rank = rank;
       const pair = g("Assistant Pair") || g("LR Pair");
       if (pair) ref.assistantPair = pair;
       referees.push(ref);

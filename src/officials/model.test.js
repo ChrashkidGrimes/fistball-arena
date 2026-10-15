@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseRoles, parseGender, rolesOf, canFill, availabilityOn, availableAt, parseSlots,
   teamMeta, sameCountry, sameClub, isWomensGame, isFinalsRound, isWomenFinal,
+  rankOf, parseRank, gameRank, defaultGameRank,
 } from "./model.js";
 
 test("parseRoles: codes and words, canonical order, unknowns ignored", () => {
@@ -105,4 +106,15 @@ test("court manager role: parsed from words, its own slot", () => {
   assert.ok(canFill({ roles: ["courtManager"] }, "cm"));
   assert.ok(!canFill({ roles: ["courtManager"] }, "r1"));
   assert.ok(canFill({}, "cm")); // no roles = any slot
+});
+
+test("ranks: referee default normal; games top for semifinal / bronze / final, else normal; override by hand", () => {
+  assert.equal(rankOf({}), "normal");
+  assert.equal(rankOf({ rank: "top" }), "top");
+  assert.equal(rankOf({ rank: "bogus" }), "normal");
+  assert.deepEqual(["Top", "A", "gut", "B", "Normal", "C", "x"].map(parseRank), ["top", "top", "good", "good", "normal", "normal", ""]);
+  for (const round of ["Semifinal 1", "Bronze medal match", "Gold medal match", "Final"]) assert.equal(defaultGameRank({ round }), "top", round);
+  for (const round of ["Qualification round", "Quarterfinal 1", "Placement 5-6"]) assert.equal(defaultGameRank({ round }), "normal", round);
+  assert.equal(gameRank({ round: "Qualification round", rank: "good" }), "good");
+  assert.equal(gameRank({ round: "Gold medal match", rank: "normal" }), "normal");
 });

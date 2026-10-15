@@ -24,7 +24,7 @@
 
 import {
   canFill, parseRoles, availabilityOn, availableAt, parseSlots,
-  teamMeta, sameCountry, sameClub, isWomensGame, isWomenFinal,
+  teamMeta, sameCountry, sameClub, isWomensGame, isWomenFinal, rankOf, rankLevel, gameRank,
 } from "./model.js";
 import { checkAssignments, isKnockout, officialName, DEFAULT_RULES, SLOTS } from "./rules.js";
 import { isPlaceholder } from "../schedule/advance.js";
@@ -33,7 +33,9 @@ import { isPlaceholder } from "../schedule/advance.js";
 // r2Nation ≫ reserve ≫ break > assistantClub > refereeAsAssistantNation > soloAssistant > load > gender > repeat.
 // Empty required slots rank between hard violations and r2Nation (a
 // non-neutral knockout r2 beats an empty one); an empty referee slot is far
-// worse than an empty scorer / line judge slot.
+// worse than an empty scorer / line judge slot. A Referee 1 below the game's
+// rank outweighs breaks and load (but no hard rule); a referee above the
+// game's rank costs a little, so top referees stay free for top games.
 export const DEFAULT_WEIGHTS = {
   hard: 1e6,        // per hard violation (only used to compare whole grids)
   missingRef: 5e5,  // empty Referee 1 / 2
@@ -41,12 +43,14 @@ export const DEFAULT_WEIGHTS = {
   r2Nation: 1e5,    // knockout r2 from a playing nation
   reserve: 1e4,
   pairSplit: 2000,  // splitting an intact assistant pair
+  rankUnder: 1500,  // per rank level Referee 1 is below the game's rank
   maxPerDay: 1000,
   break: 300,       // per extra game in a row (2 in a row)
   assistantClub: 150,
   refereeAsAssistantNation: 100,
   soloAssistant: 60,       // a line judge not working with their pair partner
   genderUnknown: 50,
+  rankOver: 40,     // per rank level a referee (1 or 2) is above the game's rank
   cmRound: 5000,    // a second court manager in the same round (one per round covers all courts)
   load: 10,         // per game already worked (balances the load)
   gender: 8,        // bonus: female referee on a women's game
@@ -72,6 +76,7 @@ function scoreOf(res, games, officials, w) {
   let s = 0;
   for (const i of res.list) {
     if (i.code === "missing") { s += i.slot === "r1" || i.slot === "r2" ? w.missingRef : w.missing; continue; }
+    if (i.code === "rank") { s += w.rankUnder * (i.gap || 1); continue; }
     s += i.level === "hard" ? w.hard : w[SOFT_WEIGHT[i.code]] || 0;
   }
   const byName = new Map(officials.map((o) => [norm(officialName(o)), o]));
@@ -88,6 +93,7 @@ function scoreOf(res, games, officials, w) {
         seen.set(key, n + 1);
       }
       if (fem && (slot === "r1" || slot === "r2") && byName.get(k)?.gender === "f") s -= w.gender;
+      if ((slot === "r1" || slot === "r2") && byName.has(k)) s += w.rankOver * Math.max(0, rankLevel(rankOf(byName.get(k))) - rankLevel(gameRank(g)));
     }
   }
   return s;
@@ -195,6 +201,9 @@ export function autoAssign(games, officials, entries, opts = {}) {
         c += w.r2Nation;
       }
       if (isWomensGame(g) && o.gender === "f") c -= w.gender;
+      const diff = rankLevel(rankOf(o)) - rankLevel(gameRank(g));
+      if (slot === "r1" && diff < 0) c += w.rankUnder * -diff;
+      if (diff > 0) c += w.rankOver * diff;
     }
     if (isAssistant) {
       if (club) c += w.assistantClub;

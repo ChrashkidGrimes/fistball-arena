@@ -884,6 +884,12 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .of-input { width: 120px; min-height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: #fff; font-size: 13px; }
 .of-input.of-sm { width: 100px; }
 .of-input.of-xs { width: 60px; }
+.rg-rank { margin-top: 4px; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; background: #fff; }
+.rg-rank-top { border-color: var(--brand); color: var(--brand); font-weight: 700; }
+.rg-rank-good { font-weight: 600; }
+.rg-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; }
+.rg-meta .rg-rank { margin-top: 0; }
+.rg-teams .kit-sw, .rg-refshirt .kit-sw { margin: 0 4px 0 2px; vertical-align: -2px; }
 .of-filter th { background: var(--bg-elev, #f6f7fb); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .of-count { margin: 4px 0; }
 .link-btn { border: 0; background: none; padding: 0; color: var(--brand); font: inherit; text-decoration: underline; cursor: pointer; }

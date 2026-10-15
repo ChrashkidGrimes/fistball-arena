@@ -21,10 +21,10 @@ const game = (over = {}) => ({
   teamA: { name: "Germany" }, teamB: { name: "Brazil" },
   refs: { r1: N(O.sui), r2: N(O.den) }, ...over,
 });
-// Issue codes of one cell. "missing" and "inRow" are left out unless asked for,
-// so each test only sees the rule it is about.
+// Issue codes of one cell. "missing", "inRow" and "rank" are left out unless
+// asked for, so each test only sees the rule it is about.
 const codes = (res, g, slot, keep = []) => (res.cells[g.id]?.[slot] || [])
-  .filter((i) => !["missing", "inRow"].includes(i.code) || keep.includes(i.code))
+  .filter((i) => !["missing", "inRow", "rank"].includes(i.code) || keep.includes(i.code))
   .map((i) => `${i.level}:${i.code}`);
 
 test("clean game has no issues", () => {
@@ -169,6 +169,23 @@ test("isKnockout and cellLevel", () => {
   assert.equal(cellLevel([{ level: "soft" }, { level: "hard" }]), "hard");
   assert.equal(cellLevel([{ level: "soft" }]), "soft");
   assert.equal(cellLevel(undefined), "");
+});
+
+test("rank: Referee 1 below the game's rank = warning; Referee 2 and higher ranks are fine", () => {
+  const top = { ...O.sui, rank: "top" }, good = { ...O.den, rank: "good" };
+  const offs = [top, good];
+  const final = game({ round: "Gold medal match", refs: { r1: N(good), r2: N(top) } });
+  const res = checkAssignments([final], offs, []);
+  assert.deepEqual(codes(res, final, "r1", ["rank"]), ["soft:rank"]);
+  assert.equal(res.cells[final.id].r1.find((i) => i.code === "rank").gap, 1);
+  assert.deepEqual(codes(res, final, "r2", ["rank"]), []);
+  // Swapped: top referee as R1 → fine. Normal game: anyone is fine.
+  assert.deepEqual(codes(checkAssignments([{ ...final, refs: { r1: N(top), r2: N(good) } }], offs, []), final, "r1", ["rank"]), []);
+  const grp = game({ refs: { r1: N(O.sui), r2: N(O.den) } });
+  assert.deepEqual(codes(checkAssignments([grp], [O.sui, O.den], []), grp, "r1", ["rank"]), []);
+  // A game ranked by hand overrides the round default.
+  const ranked = game({ rank: "good", refs: { r1: N(O.sui), r2: N(O.den) } });
+  assert.deepEqual(codes(checkAssignments([ranked], [O.sui, O.den], []), ranked, "r1", ["rank"]), ["soft:rank"]);
 });
 
 test("court manager: several courts at once is fine, another role at the same time is not; no nation, break or maxPerDay rules", () => {

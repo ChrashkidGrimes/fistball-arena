@@ -105,3 +105,23 @@ export function isFinalsRound(round) {
   return /semi|halbfinal|bronze|gold|\bfinals?\b|\bfinale\b|placement 3\b|3rd|platz 3|third/.test(r);
 }
 export const isWomenFinal = (game) => isWomensGame(game) && isFinalsRound(game?.round);
+
+// Ranks of referees and games: top > good > normal (missing = normal).
+// Auto-assign tries to give a game a Referee 1 of at least the game's rank.
+export const RANKS = ["top", "good", "normal"];
+export const RANK_LABEL = { top: "Top", good: "Good", normal: "Normal" };
+const RANK_LEVEL = { top: 2, good: 1, normal: 0 };
+export const rankLevel = (rank) => RANK_LEVEL[rank] ?? 0;
+export const rankOf = (o) => (RANKS.includes(o?.rank) ? o.rank : "normal");
+// "Top" / "A" / "1" → "top", "Good" / "gut" / "B" / "2" → "good", "Normal" / "C" / "3" → "normal".
+export function parseRank(v) {
+  const s = norm(v);
+  if (/^(top|a|1|elite)$/.test(s)) return "top";
+  if (/^(good|gut|bom|bueno|b|2)$/.test(s)) return "good";
+  if (/^(normal|standard|c|3)$/.test(s)) return "normal";
+  return "";
+}
+// A game's rank: set by hand, otherwise semifinals, bronze / 3rd place and the
+// final are top and every other game is normal.
+export const defaultGameRank = (game) => (isFinalsRound(game?.round) ? "top" : "normal");
+export const gameRank = (game) => (RANKS.includes(game?.rank) ? game.rank : defaultGameRank(game));
