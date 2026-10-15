@@ -151,7 +151,9 @@ Hard rules are hard blocks, not warnings — this is a firm design principle.
   referee is available** for that slot (eligible = available, no double
   booking, no club conflict, women's-final gender rule still satisfied).
   Highest soft penalty, always shown as an orange warning, never a silent
-  fallback. `r1` must always be neutral. Knockout = any game outside the group
+  fallback. Event setting `r2NationKo: "lenient"` (as in the Reiden tool):
+  only about as bad as a missing break, so a rested referee may take the slot
+  to balance the load (still an orange warning). Group games stay hard. `r1` must always be neutral. Knockout = any game outside the group
   stage (`phase !== "group"`, or a round other than "Qualification round").
 - **Referee as assistant from a playing nation**: a person with the `referee`
   role in `a1`/`a2` whose `country` equals either team's country → orange
@@ -220,6 +222,8 @@ Event settings (`event.officialsRules`, Referees page → "Assignment settings")
 - **`finalRefsOnLines`** (default on): in the final (gold medal game) the
   referees work the lines; auto-assign takes the assistants only from the
   referees, the assistant pool stays out.
+- **`r2NationKo`**: `"lastResort"` (default) or `"lenient"` — knockout
+  Referee 2 from a playing nation, see 3.2 (decided 2026-10-15, Reiden #15).
 - Game length for the availability windows: `event.slots.gameMinutes`.
 
 Further rules:
