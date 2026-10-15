@@ -670,7 +670,7 @@ export default function Settings({ me }) {
                   {genResult.append ? `Add ${genResult.games.length} games (keep current)` : `Publish ${genResult.games.length} games (replace all)`}
                 </button>
               )}
-              {done[5] && <p className="muted-sm">✅ Published. You can keep adjusting above and publish again, or fine-tune later via Manage → Arrange schedule.</p>}
+              {done[5] && <p className="muted-sm">✅ Published. You can keep adjusting above and publish again, or fine-tune later on the Schedule page.</p>}
             </>
           )}
         </Step>
