@@ -1036,3 +1036,20 @@ details.adv-tool[open] > summary { margin-bottom: 6px; }
 .sf-slot select { width: 100%; padding: 6px; border-radius: 7px; border: 1px solid var(--line); font-size: 13px; background: #fff; color: var(--text); }
 .sf-player { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn.to-used { background: #fdecec; color: #a42020; border-color: #f2b8b8; }
+
+/* Plans (team uniforms / official day plans) — printable, one per page */
+.plan-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.filter-pill-group { display: inline-flex; gap: 6px; }
+.plan-card { max-width: none; }
+.plan-title { margin: 0 0 8px; font-size: 16px; }
+.plan-table td { vertical-align: top; }
+.plan-free td { color: var(--muted); background: #f7f8fb; }
+.plan-shirt { margin-right: 8px; white-space: nowrap; }
+.print-only { display: none; }
+@media print {
+  .sidebar, .sb-scrim, .appbar, .no-print { display: none !important; }
+  .shell { display: block; }
+  .plan-card { break-after: page; box-shadow: none; border: 0; padding: 0; }
+  .plan-card:last-of-type { break-after: auto; }
+  .print-only { display: block; }
+}
