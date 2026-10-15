@@ -1,7 +1,9 @@
 // Uniform (kit) selection — pure logic, see docs/referee-assignment-spec.md §4.
 //
-// Colours: two shirts clash when their CIE76 ΔE (Lab) is below the threshold.
-// Only shirt colours count.
+// Colours: a jersey has 1–3 colours (src/kits.js). Two jerseys clash when
+// they are made of the same colours: every colour of each has a close match
+// (CIE76 ΔE in Lab below the threshold) in the other — for plain jerseys
+// simply the ΔE of the two colours. See jerseyDistance().
 //
 // suggestKits(games, teamKits, opts) → {
 //   proposals: [{ gameId, side: "A"|"B", from, to }],
@@ -18,7 +20,7 @@
 // Objectives (lexicographic): no clash › fewest changes › wear the OTHER kit
 // than the previous day › Uniform 1.
 
-import { resolveKit, kitKey, teamKitsFor } from "../kits.js";
+import { resolveKit, kitKey, teamKitsFor, kitColors } from "../kits.js";
 import { parseSlots } from "./model.js";
 
 export const DEFAULT_KIT_RULES = { threshold: 35, maxExhaustive: 16 };
@@ -48,6 +50,17 @@ export function deltaE(a, b) {
   return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
 }
 
+// Distance between two jerseys (colour lists): symmetric Hausdorff distance
+// of their colours — small only when each jersey's colours all appear in the
+// other one (red/white vs white/red clash; white vs black/white doesn't).
+// Infinity when either has no colour.
+export function jerseyDistance(a, b) {
+  a = (Array.isArray(a) ? a : [a]).filter(Boolean); b = (Array.isArray(b) ? b : [b]).filter(Boolean);
+  if (!a.length || !b.length) return Infinity;
+  const directed = (x, y) => Math.max(...x.map((c) => Math.min(...y.map((d) => deltaE(c, d)))));
+  return Math.max(directed(a, b), directed(b, a));
+}
+
 /* ---------- helpers ---------- */
 const name = (t) => String(t?.name ?? t ?? "");
 // Uniforms are registered per team AND category (a club's men's and women's
@@ -65,14 +78,15 @@ export function kitsByTeam(games, teamKits) {
 const timeKey = (t) => parseSlots(t)[0] || String(t ?? "").trim();
 const dateNum = (s) => { const [d, m, y] = String(s).split("/").map(Number); return (y || 0) * 10000 + (m || 0) * 100 + (d || 0); };
 const byTime = (a, b) => dateNum(a.date) - dateNum(b.date) || timeKey(a.time).localeCompare(timeKey(b.time)) || (a.nr || 0) - (b.nr || 0);
-// Registered kit numbers of a team (a kit counts when it has a shirt colour).
-export const kitNumbers = (kits) => [1, 2].filter((n) => kits?.[n - 1]?.shirt);
-const shirtOf = (v, kits) => resolveKit(v, kits)?.shirt || "";
+// Registered kit numbers of a team (a kit counts when it has a colour).
+export const kitNumbers = (kits) => [1, 2].filter((n) => kitColors(kits?.[n - 1]).length);
+// Jersey colours worn for a kit value (uniform number or old hex string).
+export const jerseyOf = (v, kits) => resolveKit(v, kits)?.colors || [];
 
 // Can these two teams ever play without a clash (any combination of their kits)?
 function resolvable(kitsA, kitsB, th, optsA = kitNumbers(kitsA), optsB = kitNumbers(kitsB)) {
   if (!optsA.length || !optsB.length) return true;
-  return optsA.some((x) => optsB.some((y) => deltaE(kitsA[x - 1].shirt, kitsB[y - 1].shirt) >= th));
+  return optsA.some((x) => optsB.some((y) => jerseyDistance(kitColors(kitsA[x - 1]), kitColors(kitsB[y - 1])) >= th));
 }
 
 // Status of each game's CURRENT kits, for the badges on the Uniforms page:
@@ -85,10 +99,10 @@ export function checkKits(games, teamKits, opts = {}) {
     const kA = teamKits[tid(g, "A")], kB = teamKits[tid(g, "B")];
     const vA = g.kit?.A, vB = g.kit?.B;
     if (!resolvable(kA, kB, th)) { out[g.id] = { level: "unresolvable", msg: "Every uniform combination of these teams clashes" }; continue; }
-    const sA = shirtOf(vA, kA), sB = shirtOf(vB, kB);
-    if (!sA || !sB) continue;
-    const d = deltaE(sA, sB);
-    if (d < th) out[g.id] = { level: "clash", msg: `Shirts too similar (ΔE ${Math.round(d)})` };
+    const sA = jerseyOf(vA, kA), sB = jerseyOf(vB, kB);
+    if (!sA.length || !sB.length) continue;
+    const d = jerseyDistance(sA, sB);
+    if (d < th) out[g.id] = { level: "clash", msg: `Jerseys too similar (ΔE ${Math.round(d)})` };
   }
   return out;
 }
@@ -197,7 +211,7 @@ export function suggestKits(games, teamKits, opts = {}) {
       }
       const tA = tid(g, "A"), tB = tid(g, "B");
       const vA = sideVal(g, "A", state), vB = sideVal(g, "B", state);
-      if (vA && vB && !unres.has(g.id) && deltaE(shirtOf(vA, teamKits[tA]), shirtOf(vB, teamKits[tB])) < th) c[0]++;
+      if (vA && vB && !unres.has(g.id) && jerseyDistance(jerseyOf(vA, teamKits[tA]), jerseyOf(vB, teamKits[tB])) < th) c[0]++;
       for (const [t, v] of [[tA, vA], [tB, vB]]) {
         if (typeof v !== "number" || !vi.has(t)) continue;
         if (prevKit.has(t) && prevKit.get(t) === v) c[2]++;
@@ -275,13 +289,13 @@ export function suggestKits(games, teamKits, opts = {}) {
     for (const g of [...cg].sort(byTime)) {
       const tA = tid(g, "A"), tB = tid(g, "B");
       for (const [t, side] of [[tA, "A"], [tB, "B"]]) { const lk = lockedOf(g, side); if (typeof lk === "number" && cur.has(t)) cur.set(t, lk); }
-      const shirt = (t, side) => (lockedOf(g, side) === "legacy" ? g.kit[side] : cur.has(t) ? teamKits[t][cur.get(t) - 1]?.shirt : "");
-      if (!unres.has(g.id) && deltaE(shirt(tA, "A"), shirt(tB, "B")) < th) {
+      const jersey = (t, side) => (lockedOf(g, side) === "legacy" ? [g.kit[side]] : cur.has(t) ? kitColors(teamKits[t][cur.get(t) - 1]) : []);
+      if (!unres.has(g.id) && jerseyDistance(jersey(tA, "A"), jersey(tB, "B")) < th) {
         for (const [t, side] of [[tB, "B"], [tA, "A"]]) {
           if (lockedOf(g, side) !== null || opts1.get(t)?.length !== 2) continue;
           const alt = 3 - cur.get(t);
-          const other = t === tA ? shirt(tB, "B") : shirt(tA, "A");
-          if (deltaE(teamKits[t][alt - 1].shirt, other) >= th) { cur.set(t, alt); break; }
+          const other = t === tA ? jersey(tB, "B") : jersey(tA, "A");
+          if (jerseyDistance(kitColors(teamKits[t][alt - 1]), other) >= th) { cur.set(t, alt); break; }
         }
       }
       for (const [t, side] of [[tA, "A"], [tB, "B"]]) if (lockedOf(g, side) === null && cur.has(t)) g.kit[side] = cur.get(t);

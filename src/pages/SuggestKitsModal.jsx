@@ -64,7 +64,7 @@ export default function SuggestKitsModal({ games, teamKits, threshold, days, day
       <div className="modal aa-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <button className="modal-x" onClick={onClose} aria-label="Close" disabled={busy}>✕</button>
         <h3 className="modal-title">Suggest uniforms</h3>
-        <p className="muted-sm">Picks each team's uniform so no game has similar shirts: one uniform per team and day where possible (otherwise as few changes as possible), alternating between days. Nothing is saved until you click Apply.</p>
+        <p className="muted-sm">Picks each team's uniform so no game has similar jerseys: one uniform per team and day where possible (otherwise as few changes as possible), alternating between days. Nothing is saved until you click Apply.</p>
 
         <div className="aa-opts">
           <label>Days{" "}

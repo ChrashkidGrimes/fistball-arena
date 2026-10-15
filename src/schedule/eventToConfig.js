@@ -3,6 +3,7 @@
 // Used by both the Schedule wizard and the in-Settings "Generate & publish" step.
 
 import { eventCategoryNames } from "../categories.js";
+import { assignGroups } from "./format.js";
 
 export function eventToConfig(event, startNr = 1) {
   const names = eventCategoryNames(event);
@@ -15,7 +16,8 @@ export function eventToConfig(event, startNr = 1) {
     return {
       name, bestOf, bestOfKo: Number(v.bestOfKo) || bestOf, override: overrides[name] || null,
       double: !!v.double, knockout: v.knockout !== false, qualifiersPerGroup: 2,
-      groups: [{ label: "A", teams: entries.filter((t) => (t.cats || []).includes(name)).map((t) => t.name) }],
+      qualifiers: Number(v.qualifiers) || undefined, placements: v.placements !== false,
+      groups: assignGroups(entries.filter((t) => (t.cats || []).includes(name)).map((t) => t.name), v.groups, v.groupOf),
     };
   });
   return { categories, slots: event?.slots || { courts: [], days: [], gameMinutes: 45, breakMinutes: 0 }, startNr };

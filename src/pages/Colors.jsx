@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { subscribeGames, saveGameKit, subscribeTeamKits, setTeamKits, updateEventFields } from "../cloud.js";
-import { resolveKit, kitKey, teamKitsFor } from "../kits.js";
+import { resolveKit, kitKey, teamKitsFor, kitColors, MAX_KIT_COLORS } from "../kits.js";
 import { KitSwatch } from "../KitSwatch.jsx";
 import { useEvent } from "../eventContext.js";
 import { flagFor } from "../flags.js";
@@ -24,7 +24,7 @@ const dayLabel = (s) => { const dt = parseDate(s); return `${dt.toLocaleDateStri
 const isWomen = (cat) => /\b(women|woman|female|ladies|damen|frauen|feminino|femenino|mujeres)\b/i.test(String(cat || ""));
 const shortTeam = (t) => String(t?.name || t || "").split(" - ")[0];
 
-function ColorPick({ value, disabled, onPick, what = "shirt" }) {
+function ColorPick({ value, disabled, onPick, what = "jersey" }) {
   const [pos, setPos] = useState(null); // {top,left} while open (fixed, via portal)
   const btnRef = useRef(null);
   const toggle = () => {
@@ -54,7 +54,7 @@ function ColorPick({ value, disabled, onPick, what = "shirt" }) {
   );
 }
 
-// Each team registers up to two uniforms (shirt colours). Referees
+// Each team registers up to two uniforms (jersey colours, up to 3 each). Referees
 // then decide which one a team wears: for a whole day at once, or overriding a
 // single game. Admin only. Shown on the games list and on Fistball Live.
 export default function Colors() {
@@ -101,12 +101,16 @@ export default function Colors() {
   if (!isAdmin) return <div className="empty">Admins only.</div>;
 
   const fail = (e) => setStatus("Failed: " + (e?.code || e?.message || e));
-  const setTeamColor = (t, n, part, color) => {
+  // Jersey colours of one uniform: set colour #idx ("" removes it).
+  const setTeamColor = (t, n, idx, color) => {
     const cur = teamKitsFor(teamKits, t.name, t.category);
-    const kits = [0, 1].map((i) => ({ shirt: cur?.[i]?.shirt || "" })); // shorts are no longer kept
-    kits[n - 1][part] = color;
+    const kits = [0, 1].map((i) => ({ colors: kitColors(cur?.[i]) }));
+    const cols = [...kits[n - 1].colors];
+    if (color) cols[idx] = color; else cols.splice(idx, 1);
+    kits[n - 1] = { colors: cols.filter(Boolean) };
     setTeamKits(t.key, kits).catch(fail);
   };
+
   const setKit = (g, side, kit) => saveGameKit(g.id, side, kit).catch(fail);
   const applySuggestion = async (proposals) => {
     await Promise.all(proposals.map((p) => saveGameKit(p.gameId, p.side, p.to)));
@@ -139,7 +143,13 @@ export default function Colors() {
       <td className="clr-cell"><span className="flag">{flagFor(t.name)}</span>{shortTeam({ name: t.name })}{t.category && <span className="muted-sm"> · {t.category}</span>}</td>
       {[1, 2].map((n) => (
         <td key={n} className="clr-cell">
-          <ColorPick what="shirt" value={teamKitsFor(teamKits, t.name, t.category)?.[n - 1]?.shirt || ""} disabled={archived} onPick={(c) => setTeamColor(t, n, "shirt", c)} />
+          {(() => {
+            const cols = kitColors(teamKitsFor(teamKits, t.name, t.category)?.[n - 1]);
+            const slots = cols.length < MAX_KIT_COLORS && !archived ? [...cols, ""] : cols;
+            return slots.map((col, idx) => (
+              <ColorPick key={idx} value={col} disabled={archived} onPick={(c) => setTeamColor(t, n, idx, c)} />
+            ));
+          })()}
         </td>
       ))}
     </tr>
@@ -165,14 +175,14 @@ export default function Colors() {
   return (
     <>
       <h2 className="page-h">Uniforms</h2>
-      <p className="muted-sm" style={{ marginTop: -8 }}>Register each team's uniforms (up to two shirt colours), then set which one a team wears — for a whole day at once, or per game to override a specific round. Shows on the games list and in the Uniforms tab of Fistball Live.</p>
+      <p className="muted-sm" style={{ marginTop: -8 }}>Register each team's uniforms (up to two; each jersey can have up to 3 colours, e.g. stripes), then set which one a team wears — for a whole day at once, or per game to override a specific round. Shows on the games list and in the Uniforms tab of Fistball Live.</p>
       {archived && <div className="warn-box">This event is archived — read-only.</div>}
 
       <div className="card" style={{ maxWidth: "none" }}>
         <h2>Team uniforms</h2>
         <div className="grid-scroll">
           <table className="ref-grid kit-teams">
-            <thead><tr><th className="rg-game">Team</th><th>Uniform 1 (shirt)</th><th>Uniform 2 (shirt)</th></tr></thead>
+            <thead><tr><th className="rg-game">Team</th><th>Uniform 1 (jersey colours)</th><th>Uniform 2 (jersey colours)</th></tr></thead>
             <tbody>
               {teams.length === 0 && <tr><td className="muted-sm" colSpan={3}>No teams yet — add them in Settings → Teams.</td></tr>}
               {[["Men", false], ["Women", true]].flatMap(([label, women]) => {
@@ -224,7 +234,7 @@ export default function Colors() {
         {nIssues("clash") ? <span className="rg-pill rg-pill-hard">{nIssues("clash")} clash{nIssues("clash") === 1 ? "" : "es"}</span> : <span className="rg-pill rg-pill-ok">No clashes</span>}
         {nIssues("unresolvable") > 0 && <span className="rg-pill rg-pill-missing" title="Every uniform combination of the two teams clashes">{nIssues("unresolvable")} can't be resolved</span>}
         {!archived && <button className="btn primary sm" onClick={() => setSuggestOpen(true)} disabled={!Object.keys(teamKits).length} title={Object.keys(teamKits).length ? "" : "Register team uniforms first"}>Suggest uniforms…</button>}
-        <label className="rg-only" title="Colour distance (ΔE, CIE76) below which two shirts count as a clash. Higher = stricter.">
+        <label className="rg-only" title="Colour distance (ΔE, CIE76) below which two jerseys count as a clash (striped jerseys: when made of the same colours). Higher = stricter.">
           Clash below ΔE <input type="number" min="5" max="80" key={threshold} defaultValue={threshold} disabled={archived} style={{ width: 56 }}
             onBlur={(e) => setThreshold(e.target.value)} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
         </label>
