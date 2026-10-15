@@ -151,6 +151,76 @@ const event = {
   },
 };
 
+/* ----------------- second demo event: club teams ----------------- */
+// Club competition (Ahlhorn style): categories "Clubs Men" / "Clubs Women",
+// each club with its nation and club name. Some officials belong to a
+// playing club (never used for that club's games); in club competitions a
+// referee from a club's nation is only a warning. Elgg plays in both
+// categories with different uniforms (kits per team and category).
+const CLUB_EVENT_ID = "demo-club-cup";
+const CLUB_MEN_CAT = "Clubs Men", CLUB_WOMEN_CAT = "Clubs Women";
+const CLUBS = [ // name, short, nation, categories
+  ["Pfungstadt", "PFU", "Germany", ["m"]], ["Hagen", "HAG", "Germany", ["m"]], ["Elgg", "ELG", "Switzerland", ["m", "w"]],
+  ["Wigoltingen", "WIG", "Switzerland", ["m"]], ["Linz", "LIN", "Austria", ["m"]], ["Vöcklabruck", "VÖC", "Austria", ["m"]],
+  ["Ahlhorn", "AHL", "Germany", ["w"]], ["Schneverdingen", "SCH", "Germany", ["w"]], ["Diepoldsau", "DIE", "Switzerland", ["w"]],
+  ["Freistadt", "FRE", "Austria", ["w"]], ["Nussbach", "NUS", "Austria", ["w"]],
+];
+const CLUB_MEN = CLUBS.filter((c) => c[3].includes("m")).map((c) => c[0]);
+const CLUB_WOMEN = CLUBS.filter((c) => c[3].includes("w")).map((c) => c[0]);
+const clubEntries = CLUBS.map(([name, short, country, cats]) => ({
+  name, short, country, club: name, cats: cats.map((c) => (c === "m" ? CLUB_MEN_CAT : CLUB_WOMEN_CAT)),
+}));
+const NAVY = "#1c2c66", SKY = "#38bdf8", VIOLET = "#7c3aed";
+const ck = (team, cat) => `${team} · ${cat}`; // kits per team and category (src/kits.js kitKey)
+const CLUB_KITS = {
+  [ck("Elgg", CLUB_MEN_CAT)]: kits(WHITE, BLACK), [ck("Linz", CLUB_MEN_CAT)]: kits(BLUE, BLACK),
+  [ck("Pfungstadt", CLUB_MEN_CAT)]: kits(YELLOW, BLACK), [ck("Vöcklabruck", CLUB_MEN_CAT)]: kits(WHITE, RED),
+  [ck("Hagen", CLUB_MEN_CAT)]: kits(YELLOW, BLUE), [ck("Wigoltingen", CLUB_MEN_CAT)]: kits(BLACK, VIOLET),
+  [ck("Ahlhorn", CLUB_WOMEN_CAT)]: kits(NAVY, SKY), [ck("Diepoldsau", CLUB_WOMEN_CAT)]: kits(BLUE, WHITE),
+  [ck("Elgg", CLUB_WOMEN_CAT)]: kits(BLUE, BLACK), [ck("Freistadt", CLUB_WOMEN_CAT)]: kits(RED, BLACK),
+  [ck("Schneverdingen", CLUB_WOMEN_CAT)]: kits(RED, WHITE), [ck("Nussbach", CLUB_WOMEN_CAT)]: kits(BLACK, WHITE),
+};
+const CLUB_REF_KITS = [
+  { id: "ref-black", name: "Black", shirt: BLACK },
+  { id: "ref-lightblue", name: "Light blue", shirt: "#6ca0dc" },
+  { id: "ref-mint", name: "Mint green", shirt: "#3eb489" },
+];
+// Twice what one round needs: 2 courts, Referee 2 only in the finals rounds,
+// Clerk 2 on court 1 (→ 3 clerks per round).
+const clubOfficial = (role, roles) => ([name, first, country, gender, club, rank, assistantPair]) => ({
+  ...official(role, roles)([name, first, country, gender, assistantPair]),
+  ...(club ? { club } : {}), ...(rank && rank !== "normal" ? { rank } : {}),
+});
+const CLUB_OFFICIALS = [
+  ...[
+    ["Maier", "Stefan", "Germany", "m", "", "top"], ["Keller", "Ruth", "Switzerland", "f", "Elgg", "good"],
+    ["Huber", "Josef", "Austria", "m", "Linz", "normal"], ["Rossi", "Paolo", "Italy", "m", "", "top"],
+    ["Dvořák", "Eva", "Czech Republic", "f", "", "good"], ["Schmid", "Urs", "Switzerland", "m", "", "normal"],
+    ["Wagner", "Petra", "Germany", "f", "Ahlhorn", "normal"], ["Brandl", "Karl", "Austria", "m", "", "good"],
+  ].map(clubOfficial("Referee", ["referee"])),
+  ...[
+    ["Albers", "Heike", "Germany", "f", "Ahlhorn"], ["Bäumer", "Tim", "Germany", "m", "Pfungstadt"], ["Frick", "Sandra", "Switzerland", "f", ""],
+    ["Gasser", "Reto", "Switzerland", "m", "Diepoldsau"], ["Leitner", "Maria", "Austria", "f", ""], ["Pichler", "Florian", "Austria", "m", "Freistadt"],
+  ].map(clubOfficial("Clerk", ["clerk"])),
+  ...[["Hartmann", "Jörg", "Germany", "m", ""], ["Zangerl", "Theresa", "Austria", "f", ""]].map(clubOfficial("Court manager", ["courtManager"])),
+  ...[
+    ["Kühn", "Lea", "Germany", "f", "Schneverdingen", "good", "pair-1"], ["Ott", "Ben", "Germany", "m", "Schneverdingen", "good", "pair-1"],
+    ["Baumann", "Nina", "Switzerland", "f", "", "normal", "pair-2"], ["Meili", "Jan", "Switzerland", "m", "", "normal", "pair-2"],
+    ["Egger", "Sara", "Austria", "f", "Nussbach", "normal", "pair-3"], ["Haas", "David", "Austria", "m", "Nussbach", "normal", "pair-3"],
+    ["Lang", "Mia", "Germany", "f", "", "top", "pair-4"], ["Roth", "Felix", "Germany", "m", "", "top", "pair-4"],
+  ].map(clubOfficial("Assistant", ["assistant"])),
+];
+const clubEvent = {
+  ...event,
+  name: "Demo Club Cup",
+  place: "Vereinsdorf",
+  address: "Faustballplatz 2, 54321 Vereinsdorf",
+  categoryBuilder: { types: ["clubs"], sexes: ["men", "women"], ages: [] },
+  entries: clubEntries,
+  formatVariants: { [CLUB_MEN_CAT]: { bestOf: 3, bestOfKo: 5 }, [CLUB_WOMEN_CAT]: { bestOf: 3, bestOfKo: 5 } },
+  officialsRules: { r2: "finals", clerk2Courts: ["1"], finalRefsOnLines: true },
+};
+
 /* ----------------- Firestore REST helpers ----------------- */
 function enc(v) {
   if (v === null || v === undefined) return { nullValue: null };
@@ -205,6 +275,43 @@ async function ensureGoogleUser({ email, name }) {
   });
 }
 
+/* ----------------- one event's documents ----------------- */
+// Event, public info, uniforms, rosters, officials, and the schedule from the
+// same generator the Settings wizard runs (+ the docs publishGames() writes).
+function eventDocs({ id, ev, men, women, catMen, catWomen, teamKits, refKits, officials, squadOffset }, now) {
+  const docs = [];
+  docs.push([`events/${id}`, { ...ev, createdAt: now }]);
+  docs.push([`public/event_${id}`, {
+    eventId: id, name: ev.name, place: ev.place, address: ev.address,
+    dates: ev.dates, startsAt: ev.startDate, endsAt: ev.endDate,
+  }]);
+  docs.push([`public/teamkits_${id}`, { eventId: id, kits: teamKits, refKits }]);
+  // Rosters, keyed "<team> - <category>" like the roster import.
+  men.forEach((t, i) => docs.push([`events/${id}/rosters/${rosterKey(`${t} - ${catMen}`)}`, { name: `${t} - ${catMen}`, ...squad(i + squadOffset, false) }]));
+  women.forEach((t, i) => docs.push([`events/${id}/rosters/${rosterKey(`${t} - ${catWomen}`)}`, { name: `${t} - ${catWomen}`, ...squad(i + squadOffset + 20, true) }]));
+  officials.forEach((r) => docs.push([`events/${id}/referees/${`${r.name}_${r.first}`.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, r]));
+  const { games, warnings, unplaced } = generateSchedule(eventToConfig(ev, 1));
+  if (warnings.length) console.warn(`${ev.name} — schedule warnings:\n  ` + warnings.join("\n  "));
+  if (unplaced.length) console.warn(`${ev.name}: ${unplaced.length} games could not be placed.`);
+  const shortOf = Object.fromEntries(ev.entries.map((e) => [e.name, e.short]));
+  for (const g of games) {
+    const teamA = { ...g.teamA, short: shortOf[g.teamA.name] || "" };
+    const teamB = { ...g.teamB, short: shortOf[g.teamB.name] || "" };
+    docs.push([`events/${id}/games/g${g.nr}`, {
+      nr: g.nr, date: g.date, time: g.time, court: g.court,
+      bestOf: g.bestOf, round: g.round, category: g.category, group: g.group || "",
+      teamA, teamB, srcA: g.srcA || null, srcB: g.srcB || null,
+    }]);
+    docs.push([`events/${id}/results/g${g.nr}`, {
+      nr: g.nr, date: g.date, time: g.time, court: g.court,
+      round: g.round, category: g.category, group: g.group || "", bestOf: g.bestOf,
+      teamA: teamA.name, teamB: teamB.name, teamAShort: teamA.short, teamBShort: teamB.short,
+      setsA: 0, setsB: 0, pointsA: 0, pointsB: 0, sets: [], status: "Not Started", updatedAt: now,
+    }]);
+  }
+  return { docs, games: games.length, rosters: men.length + women.length, officials: officials.length };
+}
+
 /* ----------------- seed ----------------- */
 async function main() {
   if (RESET) {
@@ -226,47 +333,18 @@ async function main() {
   // the others as event members, mirrored onto people/{email} like the app does.
   for (const u of USERS) {
     const person = { email: u.email, name: u.name };
-    if (u.role) person.events = { [EVENT_ID]: u.role };
+    if (u.role) person.events = { [EVENT_ID]: u.role, [CLUB_EVENT_ID]: u.role };
     docs.push([`people/${u.email}`, person]);
     if (u.orgAdmin) docs.push([`orgAdmins/${u.email}`, { email: u.email, name: u.name, addedBy: "seed", addedAt: now }]);
-    if (u.role) docs.push([`events/${EVENT_ID}/members/${u.email}`, { email: u.email, name: u.name, role: u.role, addedBy: "seed", addedAt: now }]);
+    if (u.role) for (const id of [EVENT_ID, CLUB_EVENT_ID]) docs.push([`events/${id}/members/${u.email}`, { email: u.email, name: u.name, role: u.role, addedBy: "seed", addedAt: now }]);
   }
 
-  docs.push([`events/${EVENT_ID}`, { ...event, createdAt: now }]);
-  docs.push([`public/event_${EVENT_ID}`, {
-    eventId: EVENT_ID, name: event.name, place: event.place, address: event.address,
-    dates: event.dates, startsAt: event.startDate, endsAt: event.endDate,
-  }]);
-  docs.push([`public/teamkits_${EVENT_ID}`, { eventId: EVENT_ID, kits: TEAM_KITS, refKits: REF_KITS }]);
+  const national = eventDocs({ id: EVENT_ID, ev: event, men: MEN, women: WOMEN, catMen: CAT_MEN, catWomen: CAT_WOMEN,
+    teamKits: TEAM_KITS, refKits: REF_KITS, officials: REFEREES, squadOffset: 0 }, now);
+  const clubs = eventDocs({ id: CLUB_EVENT_ID, ev: clubEvent, men: CLUB_MEN, women: CLUB_WOMEN, catMen: CLUB_MEN_CAT, catWomen: CLUB_WOMEN_CAT,
+    teamKits: CLUB_KITS, refKits: CLUB_REF_KITS, officials: CLUB_OFFICIALS, squadOffset: 40 }, now);
+  docs.push(...national.docs, ...clubs.docs);
   docs.push(["public/live", { eventId: EVENT_ID, name: event.name, startsAt: event.startDate, endsAt: event.endDate, updatedAt: now }]);
-
-  // Rosters, keyed "<team> - <category>" like the roster import.
-  MEN.forEach((t, i) => docs.push([`events/${EVENT_ID}/rosters/${rosterKey(`${t} - ${CAT_MEN}`)}`, { name: `${t} - ${CAT_MEN}`, ...squad(i, false) }]));
-  WOMEN.forEach((t, i) => docs.push([`events/${EVENT_ID}/rosters/${rosterKey(`${t} - ${CAT_WOMEN}`)}`, { name: `${t} - ${CAT_WOMEN}`, ...squad(i + 20, true) }]));
-
-  REFEREES.forEach((r) => docs.push([`events/${EVENT_ID}/referees/${`${r.name}_${r.first}`.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, r]));
-
-  // Schedule: the same generator the Settings wizard runs, then the same game
-  // + public result docs publishGames() writes.
-  const { games, warnings, unplaced } = generateSchedule(eventToConfig(event, 1));
-  if (warnings.length) console.warn("Schedule warnings:\n  " + warnings.join("\n  "));
-  if (unplaced.length) console.warn(`${unplaced.length} games could not be placed.`);
-  const shortOf = Object.fromEntries(entries.map((e) => [e.name, e.short]));
-  for (const g of games) {
-    const teamA = { ...g.teamA, short: shortOf[g.teamA.name] || "" };
-    const teamB = { ...g.teamB, short: shortOf[g.teamB.name] || "" };
-    docs.push([`events/${EVENT_ID}/games/g${g.nr}`, {
-      nr: g.nr, date: g.date, time: g.time, court: g.court,
-      bestOf: g.bestOf, round: g.round, category: g.category, group: g.group || "",
-      teamA, teamB, srcA: g.srcA || null, srcB: g.srcB || null,
-    }]);
-    docs.push([`events/${EVENT_ID}/results/g${g.nr}`, {
-      nr: g.nr, date: g.date, time: g.time, court: g.court,
-      round: g.round, category: g.category, group: g.group || "", bestOf: g.bestOf,
-      teamA: teamA.name, teamB: teamB.name, teamAShort: teamA.short, teamBShort: teamB.short,
-      setsA: 0, setsB: 0, pointsA: 0, pointsB: 0, sets: [], status: "Not Started", updatedAt: now,
-    }]);
-  }
 
   // A finished past event, so the events timeline isn't empty.
   const past = day(-60);
@@ -276,7 +354,8 @@ async function main() {
   }]);
 
   await commit(docs);
-  console.log(`Seeded ${USERS.length} users, event "${event.name}" (${games.length} games, ${MEN.length + WOMEN.length} rosters, ${REFEREES.length} officials, kits for ${Object.keys(TEAM_KITS).length} teams, ${REF_KITS.length} referee shirt colours).`);
+  console.log(`Seeded ${USERS.length} users, event "${event.name}" (${national.games} games, ${national.rosters} rosters, ${national.officials} officials, kits for ${Object.keys(TEAM_KITS).length} teams, ${REF_KITS.length} referee shirt colours)`
+    + ` and "${clubEvent.name}" (club teams: ${clubs.games} games, ${clubs.rosters} rosters, ${clubs.officials} officials).`);
   console.log("Sign in with one of: " + USERS.map((u) => u.email).join(", "));
 }
 
