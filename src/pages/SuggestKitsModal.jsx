@@ -69,7 +69,7 @@ export default function SuggestKitsModal({ games, teamKits, refKits = [], thresh
   })();
 
   const nChanges = res ? sum(res.changes) : 0;
-  const refLabel = (id) => { const r = refKits.find((x) => x.id === id); return r ? <><KitSwatch kit={{ shirt: r.shirt }} size={14} /> {r.name}</> : "—"; };
+  const refLabel = (id) => { const r = refKits.find((x) => x.id === id); return r ? <><KitSwatch kit={{ colors: [r.shirt] }} size={14} /> {r.name}</> : "—"; };
   const delta = (a, b) => (a === b ? <b>{b}</b> : <><s className="muted-sm">{a}</s> → <b>{b}</b></>);
 
   return (
